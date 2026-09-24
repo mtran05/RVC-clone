@@ -8,6 +8,7 @@ from inference.module.modules import LayerNorm
 
 
 class Encoder(nn.Module):
+    """Transformer encoder over HuBERT and pitch embeddings."""
     def __init__(
         self,
         hidden_channels,
@@ -19,6 +20,7 @@ class Encoder(nn.Module):
         window_size=10,
         **kwargs
     ):
+        """Stack attention layers and feed-forward layers."""
         super(Encoder, self).__init__()
         self.hidden_channels = hidden_channels
         self.filter_channels = filter_channels
@@ -56,6 +58,7 @@ class Encoder(nn.Module):
             self.norm_layers_2.append(LayerNorm(hidden_channels))
 
     def forward(self, x, x_mask):
+        """Run every attention and feed-forward layer under the length mask."""
         attn_mask = x_mask.unsqueeze(2) * x_mask.unsqueeze(-1)
         x = x * x_mask
         zippep = zip(
@@ -74,6 +77,7 @@ class Encoder(nn.Module):
 
 
 class MultiHeadAttention(nn.Module):
+    """Multi-head attention with relative position embeddings."""
     def __init__(
         self,
         channels,
@@ -86,6 +90,7 @@ class MultiHeadAttention(nn.Module):
         proximal_bias=False,
         proximal_init=False,
     ):
+        """Build the query, key, value, and output projections."""
         super(MultiHeadAttention, self).__init__()
         assert channels % n_heads == 0
 
@@ -130,6 +135,7 @@ class MultiHeadAttention(nn.Module):
     def forward(
         self, x, c, attn_mask = None
     ):
+        """Project q, k, and v, then run attention."""
         q = self.conv_q(x)
         k = self.conv_k(c)
         v = self.conv_v(c)
@@ -147,6 +153,7 @@ class MultiHeadAttention(nn.Module):
         mask = None,
     ):
         # reshape [b, d, t] -> [b, n_h, t, d_k]
+        """Score queries against keys and mix the values."""
         b, d, t_s = key.size()
         t_t = query.size(2)
         query = query.view(b, self.n_heads, self.k_channels, t_t).transpose(2, 3)
@@ -216,6 +223,7 @@ class MultiHeadAttention(nn.Module):
         return ret
 
     def _get_relative_embeddings(self, relative_embeddings, length):
+        """Slice relative position embeddings so they match this length."""
         max_relative_position = 2 * self.window_size + 1
         # Pad first before slice to avoid using cond ops.
         pad_length = max(length - (self.window_size + 1), 0)
@@ -296,6 +304,7 @@ class MultiHeadAttention(nn.Module):
 
 
 class FFN(nn.Module):
+    """Convolutional feed-forward block used after attention."""
     def __init__(
         self,
         in_channels,
@@ -306,6 +315,7 @@ class FFN(nn.Module):
         activation = None,
         causal=False,
     ):
+        """Build the two convolutions and the activation."""
         super(FFN, self).__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -325,6 +335,7 @@ class FFN(nn.Module):
         self.drop = nn.Dropout(p_dropout)
 
     def padding(self, x, x_mask) :
+        """Pad the time axis so the convolutions keep the sequence length."""
         if self.causal:
             padding = self._causal_padding(x * x_mask)
         else:
@@ -332,6 +343,7 @@ class FFN(nn.Module):
         return padding
 
     def forward(self, x, x_mask):
+        """Apply the two convolutions under the mask."""
         x = self.conv_1(self.padding(x, x_mask))
         if self.is_activation:
             x = x * torch.sigmoid(1.702 * x)
@@ -343,6 +355,7 @@ class FFN(nn.Module):
         return x * x_mask
 
     def _causal_padding(self, x):
+        """Pad only on the left so a frame cannot see the future."""
         if self.kernel_size == 1:
             return x
         pad_l = self.kernel_size - 1
@@ -356,6 +369,7 @@ class FFN(nn.Module):
         return x
 
     def _same_padding(self, x):
+        """Pad both sides so the convolution stays centered."""
         if self.kernel_size == 1:
             return x
         pad_l = (self.kernel_size - 1) // 2

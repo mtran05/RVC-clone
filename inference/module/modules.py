@@ -14,7 +14,9 @@ LRELU_SLOPE = 0.1
 
 
 class LayerNorm(nn.Module):
+    """Channel-wise layer norm for convolutional feature maps."""
     def __init__(self, channels, eps=1e-5):
+        """Store the per-channel scale and bias."""
         super(LayerNorm, self).__init__()
         self.channels = channels
         self.eps = eps
@@ -23,6 +25,7 @@ class LayerNorm(nn.Module):
         self.beta = nn.Parameter(torch.zeros(channels))
 
     def forward(self, x):
+        """Normalize across channels and restore the scale and bias."""
         x = x.transpose(1, -1)
         x = F.layer_norm(x, (self.channels,), self.gamma, self.beta, self.eps)
         return x.transpose(1, -1)
@@ -34,6 +37,7 @@ class DDSConv(nn.Module):
     """
 
     def __init__(self, channels, kernel_size, n_layers, p_dropout=0.0):
+        """Stack dilated depth-separable convolutions."""
         super(DDSConv, self).__init__()
         self.channels = channels
         self.kernel_size = kernel_size
@@ -63,6 +67,7 @@ class DDSConv(nn.Module):
             self.norms_2.append(LayerNorm(channels))
 
     def forward(self, x, x_mask, g = None):
+        """Run the dilated stack and optionally add a global conditioning vector."""
         if g is not None:
             x = x + g
         for i in range(self.n_layers):
@@ -78,6 +83,7 @@ class DDSConv(nn.Module):
 
 
 class WN(torch.nn.Module):
+    """WaveNet residual block used inside the normalizing flow."""
     def __init__(
         self,
         hidden_channels,
@@ -87,6 +93,7 @@ class WN(torch.nn.Module):
         gin_channels=0,
         p_dropout=0,
     ):
+        """Build the dilated convolutions and their gated activations."""
         super(WN, self).__init__()
         assert kernel_size % 2 == 1
         self.hidden_channels = hidden_channels
@@ -132,6 +139,7 @@ class WN(torch.nn.Module):
     def forward(
         self, x, x_mask, g = None
     ):
+        """Run the residual stack and return the projected output."""
         output = torch.zeros_like(x)
         n_channels_tensor = torch.IntTensor([self.hidden_channels])
 
@@ -161,6 +169,7 @@ class WN(torch.nn.Module):
         return output * x_mask
 
     def remove_weight_norm(self):
+        """Drop weight norm from the dilated convolutions."""
         if self.gin_channels != 0:
             torch.nn.utils.remove_weight_norm(self.cond_layer)
         for l in self.in_layers:
@@ -169,7 +178,9 @@ class WN(torch.nn.Module):
             torch.nn.utils.remove_weight_norm(l)
 
 class ResBlock1(torch.nn.Module):
+    """Three dilated residual convolutions, used when the checkpoint asks for resblock 1."""
     def __init__(self, channels, kernel_size=3, dilation=(1, 3, 5)):
+        """Build the dilated convs and the matching 1-dilation convs."""
         super(ResBlock1, self).__init__()
         self.convs1 = nn.ModuleList(
             [
@@ -245,6 +256,7 @@ class ResBlock1(torch.nn.Module):
         self.lrelu_slope = LRELU_SLOPE
 
     def forward(self, x, x_mask = None):
+        """Run each dilated pair and add the residual."""
         for c1, c2 in zip(self.convs1, self.convs2):
             xt = F.leaky_relu(x, self.lrelu_slope)
             if x_mask is not None:
@@ -260,13 +272,16 @@ class ResBlock1(torch.nn.Module):
         return x
 
     def remove_weight_norm(self):
+        """Drop weight norm from both convolution lists."""
         for l in self.convs1:
             remove_weight_norm(l)
         for l in self.convs2:
             remove_weight_norm(l)
 
 class ResBlock2(torch.nn.Module):
+    """Two dilated residual convolutions, used when the checkpoint asks for resblock 2."""
     def __init__(self, channels, kernel_size=3, dilation=(1, 3)):
+        """Build the dilated convs and the matching 1-dilation convs."""
         super(ResBlock2, self).__init__()
         self.convs = nn.ModuleList(
             [
@@ -296,6 +311,7 @@ class ResBlock2(torch.nn.Module):
         self.lrelu_slope = LRELU_SLOPE
 
     def forward(self, x, x_mask = None):
+        """Run each dilated pair and add the residual."""
         for c in self.convs:
             xt = F.leaky_relu(x, self.lrelu_slope)
             if x_mask is not None:
@@ -307,10 +323,12 @@ class ResBlock2(torch.nn.Module):
         return x
 
     def remove_weight_norm(self):
+        """Drop weight norm from both convolution lists."""
         for l in self.convs:
             remove_weight_norm(l)
 
 class Log(nn.Module):
+    """Flow step that replaces features with their log."""
     def forward(
         self,
         x,
@@ -318,6 +336,7 @@ class Log(nn.Module):
         g = None,
         reverse = False,
     ) :
+        """Take log, or exp when reverse is set."""
         if not reverse:
             y = torch.log(torch.clamp_min(x, 1e-5)) * x_mask
             logdet = torch.sum(-y, [1, 2])
@@ -328,6 +347,7 @@ class Log(nn.Module):
 
 
 class Flip(nn.Module):
+    """Flow step that reverses the channel order."""
     def forward(
         self,
         x,
@@ -335,6 +355,7 @@ class Flip(nn.Module):
         g = None,
         reverse = False,
     ) :
+        """Flip the channel axis. The inverse is the same flip."""
         x = torch.flip(x, [1])
         if not reverse:
             logdet = torch.zeros(x.size(0)).to(dtype=x.dtype, device=x.device)
@@ -344,13 +365,16 @@ class Flip(nn.Module):
 
 
 class ElementwiseAffine(nn.Module):
+    """Per-channel scale and shift inside the flow."""
     def __init__(self, channels):
+        """Start from an identity scale and a zero shift."""
         super(ElementwiseAffine, self).__init__()
         self.channels = channels
         self.m = nn.Parameter(torch.zeros(channels, 1))
         self.logs = nn.Parameter(torch.zeros(channels, 1))
 
     def forward(self, x, x_mask, reverse=False, **kwargs):
+        """Apply the affine map, or undo it when reverse is set."""
         if not reverse:
             y = self.m + torch.exp(self.logs) * x
             y = y * x_mask
@@ -362,6 +386,7 @@ class ElementwiseAffine(nn.Module):
 
 
 class ResidualCouplingLayer(nn.Module):
+    """Coupling layer: one half of the channels predicts the other half."""
     def __init__(
         self,
         channels,
@@ -373,6 +398,7 @@ class ResidualCouplingLayer(nn.Module):
         gin_channels=0,
         mean_only=False,
     ):
+        """Build the WaveNet that predicts the scale and shift."""
         assert channels % 2 == 0, "channels should be divisible by 2"
         super(ResidualCouplingLayer, self).__init__()
         self.channels = channels
@@ -403,6 +429,7 @@ class ResidualCouplingLayer(nn.Module):
         g = None,
         reverse = False,
     ):
+        """Transform the second half of the channels, or invert that transform."""
         x0, x1 = torch.split(x, [self.half_channels] * 2, 1)
         h = self.pre(x0) * x_mask
         h = self.enc(h, x_mask, g=g)
@@ -424,9 +451,11 @@ class ResidualCouplingLayer(nn.Module):
             return x, torch.zeros([1])
 
     def remove_weight_norm(self):
+        """Drop weight norm from the WaveNet."""
         self.enc.remove_weight_norm()
 
 class ConvFlow(nn.Module):
+    """Spline coupling layer driven by a small convolution stack."""
     def __init__(
         self,
         in_channels,
@@ -436,6 +465,7 @@ class ConvFlow(nn.Module):
         num_bins=10,
         tail_bound=5.0,
     ):
+        """Build the depth-separable conv that predicts spline parameters."""
         super(ConvFlow, self).__init__()
         self.in_channels = in_channels
         self.filter_channels = filter_channels
@@ -460,6 +490,7 @@ class ConvFlow(nn.Module):
         g = None,
         reverse=False,
     ):
+        """Warp the second half of the channels with a rational-quadratic spline."""
         x0, x1 = torch.split(x, [self.half_channels] * 2, 1)
         h = self.pre(x0)
         h = self.convs(h, x_mask, g=g)

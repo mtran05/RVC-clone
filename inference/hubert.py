@@ -1,3 +1,9 @@
+"""HuBERT content features for v1 (256-D) and v2 (768-D) voice models.
+
+The weights live in assets/hubert_base. v1 reads encoder layer 9 and a
+final projection. v2 reads the last hidden state.
+"""
+
 import logging
 from functools import lru_cache
 from pathlib import Path
@@ -15,7 +21,10 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
 class HubertModelWithFinalProj(HubertModel):
+    """HuBERT plus the linear layer that turns layer 9 into 256-D features."""
+
     def __init__(self, config):
+        """Add final_proj, which the stock Transformers HubertModel omits."""
         super().__init__(config)
         self.final_proj = nn.Linear(config.hidden_size, config.classifier_proj_size)
 
@@ -23,6 +32,7 @@ HUBERT_MODEL_PATH = (PROJECT_ROOT / "assets" / "hubert_base").resolve()
 
 
 def _device_type(device):
+    """Return cuda, cpu, or privateuseone from a device or a device string."""
     if isinstance(device, torch.device):
         return device.type
     return str(device).split(":", 1)[0]
@@ -59,6 +69,7 @@ def load_hubert_model(device, is_half=False):
 
 @lru_cache(maxsize=1)
 def hubert_audio_requires_normalization():
+    """Return whether this checkpoint expects peak-normalized input audio."""
     feature_extractor = AutoFeatureExtractor.from_pretrained(
         str(HUBERT_MODEL_PATH), local_files_only=True
     )
@@ -82,6 +93,7 @@ def extract_hubert_features(model, source, version, padding_mask=None):
     if version == "v1":
         if attention_mask is None:
             def forward(input_values):
+                """Project HuBERT layer 9 into the 256-D v1 features."""
                 outputs = model(
                     input_values=input_values,
                     attention_mask=None,
@@ -93,6 +105,7 @@ def extract_hubert_features(model, source, version, padding_mask=None):
             return run_cuda_graph(model, "hubert-v1-no-mask", forward, source)
 
         def forward(input_values, mask):
+            """Project HuBERT layer 9, ignoring padded frames."""
             outputs = model(
                 input_values=input_values,
                 attention_mask=mask,
@@ -107,6 +120,7 @@ def extract_hubert_features(model, source, version, padding_mask=None):
 
     if attention_mask is None:
         def forward(input_values):
+            """Return the last HuBERT layer, which is the 768-D v2 feature."""
             return model(
                 input_values=input_values,
                 attention_mask=None,
@@ -117,6 +131,7 @@ def extract_hubert_features(model, source, version, padding_mask=None):
         return run_cuda_graph(model, "hubert-v2-no-mask", forward, source)
 
     def forward(input_values, mask):
+        """Return the last HuBERT layer, ignoring padded frames."""
         return model(
             input_values=input_values,
             attention_mask=mask,

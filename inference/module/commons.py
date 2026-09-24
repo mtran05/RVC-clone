@@ -1,17 +1,22 @@
+"""Small tensor helpers shared by the synthesizer layers."""
+
 import torch
 
 
 def init_weights(m, mean=0.0, std=0.01):
+    """Fill a convolution's weights from a normal distribution."""
     classname = m.__class__.__name__
     if classname.find("Conv") != -1:
         m.weight.data.normal_(mean, std)
 
 
 def get_padding(kernel_size, dilation=1):
+    """Return padding that keeps a dilated convolution the same length."""
     return int((kernel_size * dilation - dilation) / 2)
 
 
 def fused_add_tanh_sigmoid_multiply(input_a, input_b, n_channels):
+    """Gated activation: tanh of the first half times sigmoid of the second."""
     n_channels_int = n_channels[0]
     in_act = input_a + input_b
     t_act = torch.tanh(in_act[:, :n_channels_int, :])
@@ -20,6 +25,7 @@ def fused_add_tanh_sigmoid_multiply(input_a, input_b, n_channels):
 
 
 def sequence_mask(length, max_length=None):
+    """Build a mask that is true for each valid frame in a batch."""
     if max_length is None:
         max_length = length.max()
     positions = torch.arange(max_length, dtype=length.dtype, device=length.device)

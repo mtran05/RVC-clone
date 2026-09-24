@@ -1,3 +1,9 @@
+"""Streaming voice conversion for one audio block at a time.
+
+RVC holds HuBERT, an optional FAISS index, a pitch cache, and the
+synthesizer. infer() is what realtime.py calls for every block.
+"""
+
 import logging
 import traceback
 from time import time as ttime
@@ -17,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 def get_synthesizer(pth_path, device=torch.device("cpu")):
+    """Build the synthesizer that matches a .pth checkpoint and load its weights."""
     from inference.module.models import (
         SynthesizerTrnMs256NSFsid,
         SynthesizerTrnMs256NSFsid_nono,
@@ -25,6 +32,7 @@ def get_synthesizer(pth_path, device=torch.device("cpu")):
     )
 
     checkpoint = torch.load(pth_path, map_location=torch.device("cpu"))
+    # Speaker count in the saved config can disagree with the embedding table.
     checkpoint["config"][-3] = checkpoint["weight"]["emb_g.weight"].shape[0]
     use_f0 = checkpoint.get("f0", 1)
     version = checkpoint.get("version", "v1")
@@ -40,6 +48,7 @@ def get_synthesizer(pth_path, device=torch.device("cpu")):
             net_g = SynthesizerTrnMs768NSFsid_nono(*checkpoint["config"])
     else:
         raise ValueError(f"Unsupported RVC version: {version!r}")
+    # The posterior encoder is only used in training.
     if hasattr(net_g, "enc_q"):
         del net_g.enc_q
     net_g.load_state_dict(checkpoint["weight"], strict=False)
@@ -62,6 +71,7 @@ class RVC:
         config,
         last_rvc=None,
     ):
+        """Load HuBERT, the voice model, and the index unless last_rvc already has them."""
         try:
             self.config = config
             self.device = config.device
@@ -108,11 +118,13 @@ class RVC:
             raise
 
     def _load_index(self):
+        """Read the FAISS index and keep every stored feature vector in memory."""
         self.index = faiss.read_index(self.index_path)
         self.big_npy = self.index.reconstruct_n(0, self.index.ntotal)
         logger.info("Index retrieval enabled")
 
     def _load_synthesizer(self):
+        """Load the voice model and remember its sample rate, version, and f0 flag."""
         self.net_g, checkpoint = get_synthesizer(self.pth_path, self.device)
         self.tgt_sr = checkpoint["config"][-1]
         self.if_f0 = checkpoint.get("f0", 1)
@@ -123,17 +135,21 @@ class RVC:
             self.net_g = self.net_g.float()
 
     def change_key(self, new_key):
+        """Set the pitch shift in semitones for later blocks."""
         self.f0_up_key = new_key
 
     def change_formant(self, new_formant):
+        """Set the formant shift in semitones for later blocks."""
         self.formant_shift = new_formant
 
     def change_index_rate(self, new_index_rate):
+        """Change how strongly retrieved index features replace HuBERT features."""
         if new_index_rate != 0 and self.index_rate == 0:
             self._load_index()
         self.index_rate = new_index_rate
 
     def get_f0_post(self, f0):
+        """Turn Hz pitch into the coarse 1..255 bins the synthesizer expects."""
         if not torch.is_tensor(f0):
             f0 = torch.from_numpy(f0)
         f0 = f0.float().to(self.device).squeeze()
@@ -148,12 +164,14 @@ class RVC:
         return f0_coarse, f0
 
     def get_f0(self, x, f0_up_key, method="rmvpe"):
+        """Estimate pitch with rmvpe, fcpe, or Parselmouth, then shift it."""
         if method == "rmvpe":
             return self.get_f0_rmvpe(x, f0_up_key)
         if method == "fcpe":
             return self.get_f0_fcpe(x, f0_up_key)
         if method != "pm":
             raise ValueError(f"Unsupported F0 method: {method}")
+        # Parselmouth needs padding so the first pitch frame lines up with the audio.
         x = x.cpu().numpy()
         p_len = x.shape[0] // 160 + 1
         f0_min = 65
@@ -174,6 +192,7 @@ class RVC:
         return self._shift_f0(f0, f0_up_key)
 
     def get_f0_rmvpe(self, x, f0_up_key):
+        """Estimate pitch with RMVPE and apply the semitone shift."""
         if not hasattr(self, "model_rmvpe"):
             from inference.rmvpe import RMVPE
 
@@ -187,6 +206,7 @@ class RVC:
         return self._shift_f0(f0, f0_up_key)
 
     def get_f0_fcpe(self, x, f0_up_key):
+        """Estimate pitch with FCPE and apply the semitone shift."""
         if not hasattr(self, "model_fcpe"):
             from inference.fcpe import FCPEInfer
 
@@ -207,6 +227,7 @@ class RVC:
         return self._shift_f0(f0, f0_up_key)
 
     def _shift_f0(self, f0, f0_up_key):
+        """Fill unvoiced gaps, shift by semitones, and quantize to coarse bins."""
         unvoiced = f0 == 0
         if np.any(~unvoiced):
             f0[unvoiced] = np.interp(
@@ -223,6 +244,11 @@ class RVC:
         return_length,
         f0method,
     ):
+        """Convert one 16 kHz block and return audio at the model's frame rate.
+
+        skip_head drops the extra context the caller keeps for a stable
+        start. return_length is how many 10 ms frames the caller wants back.
+        """
         report_status = self.infer_count < 3 or self.infer_count % 100 == 0
         self.infer_count += 1
         started = ttime()
@@ -232,6 +258,7 @@ class RVC:
             else:
                 feats = input_wav.float().view(1, -1)
             padding_mask = torch.zeros(feats.shape, dtype=torch.bool, device=self.device)
+            # Content features. The extra last frame keeps the length even.
             feats = extract_hubert_features(
                 self.model,
                 feats,
@@ -241,6 +268,7 @@ class RVC:
             feats = torch.cat((feats, feats[:, -1:, :]), 1)
         features_done = ttime()
         try:
+            # Blend HuBERT features toward the nearest stored voice vectors.
             if hasattr(self, "index") and self.index_rate != 0:
                 npy = feats[0][skip_head // 2 :].cpu().numpy().astype("float32")
                 score, ix = self.index.search(npy, k=8)
@@ -278,6 +306,7 @@ class RVC:
                 self.f0_up_key - self.formant_shift,
                 f0method,
             )
+            # Slide the pitch cache forward by this block, then write the new tail.
             shift = block_frame_16k // 160
             self.cache_pitch[:-shift] = self.cache_pitch[shift:].clone()
             self.cache_pitchf[:-shift] = self.cache_pitchf[shift:].clone()
@@ -288,6 +317,7 @@ class RVC:
                 self.cache_pitchf[None, -p_len:] * return_length2 / return_length
             )
         pitch_done = ttime()
+        # HuBERT frames are 20 ms. The synthesizer wants 10 ms frames.
         feats = F.interpolate(feats.permute(0, 2, 1), scale_factor=2).permute(0, 2, 1)
         feats = feats[:, :p_len, :]
         p_len_tensor = torch.tensor([p_len], device=self.device, dtype=torch.long)
@@ -335,6 +365,7 @@ class RVC:
                     sid,
                 )
         inferred_audio = inferred_audio.squeeze(1).float()
+        # A formant shift changes the model's output hop, so resample back.
         upp_res = int(np.floor(factor * self.tgt_sr // 100))
         if upp_res != self.tgt_sr // 100:
             if upp_res not in self.resample_kernel:

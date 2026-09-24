@@ -1,3 +1,10 @@
+"""Offline voice conversion for a whole file.
+
+Pipeline splits long audio at quiet points, extracts HuBERT features and
+pitch per chunk, runs the synthesizer, then stitches the chunks and
+matches the original loudness.
+"""
+
 import os
 import traceback
 import logging
@@ -21,7 +28,10 @@ bh, ah = signal.butter(N=5, Wn=48, btype="high", fs=16000)
 
 
 def change_rms(data1, sr1, data2, sr2, rate):
-    # print(data1.max(),data2.max())
+    """Blend the converted loudness toward the original file's envelope.
+
+    rate 1 keeps the converted loudness. rate 0 copies the input envelope.
+    """
     rms1 = librosa.feature.rms(
         y=data1, frame_length=sr1 // 2 * 2, hop_length=sr1 // 2
     )
@@ -43,7 +53,10 @@ def change_rms(data1, sr1, data2, sr2, rate):
 
 
 class Pipeline(object):
+    """Chunked offline conversion using the sizes in Config."""
+
     def __init__(self, tgt_sr, config):
+        """Turn the config's second-based chunk sizes into sample counts."""
         self.x_pad, self.x_query, self.x_center, self.x_max, self.is_half = (
             config.x_pad,
             config.x_query,
@@ -68,6 +81,7 @@ class Pipeline(object):
         f0_up_key,
         f0_method,
     ):
+        """Return coarse pitch bins and the shifted Hz contour for one chunk."""
         if f0_method not in ("pm", "rmvpe", "fcpe"):
             raise ValueError(f"Unsupported F0 method: {f0_method}")
         time_step = self.window / self.sr * 1000
@@ -121,6 +135,7 @@ class Pipeline(object):
                 threshold=0.006,
             ).squeeze().detach().cpu().numpy()
 
+        # Fill unvoiced gaps, then shift by semitones and quantize to 1..255.
         try:
             uv = f0 == 0
             f0[uv] = np.interp(np.where(uv)[0], np.where(~uv)[0], f0[~uv])
@@ -152,6 +167,7 @@ class Pipeline(object):
         version,
         protect,
     ):
+        """Convert one padded chunk and return a waveform at the model rate."""
         feats = torch.from_numpy(audio0)
         if self.is_half:
             feats = feats.half()
@@ -164,6 +180,7 @@ class Pipeline(object):
         padding_mask = torch.BoolTensor(feats.shape).to(self.device).fill_(False)
 
         t0 = ttime()
+        # Content features, then an optional blend toward the retrieved voice.
         with torch.no_grad():
             feats = extract_hubert_features(
                 model,
@@ -207,6 +224,7 @@ class Pipeline(object):
                 pitch = pitch[:, :p_len]
                 pitchf = pitchf[:, :p_len]
 
+        # On unvoiced frames, keep more of the original features so consonants stay.
         if protect < 0.5 and pitch is not None and pitchf is not None:
             pitchff = pitchf.clone()
             pitchff[pitchf > 0] = 1
@@ -269,6 +287,7 @@ class Pipeline(object):
         version,
         protect,
     ):
+        """Convert a whole 16 kHz file and return 16-bit audio."""
         if (
             file_index != ""
             and os.path.exists(file_index)
@@ -282,6 +301,7 @@ class Pipeline(object):
                 index = index_vectors = None
         else:
             index = index_vectors = None
+        # Drop rumble below 48 Hz, then look for quiet places to split long files.
         audio = signal.filtfilt(bh, ah, audio)
         audio_pad = np.pad(audio, (self.window // 2, self.window // 2), mode="reflect")
         opt_ts = []
@@ -391,6 +411,7 @@ class Pipeline(object):
                     protect,
                 )[self.t_pad_tgt : -self.t_pad_tgt]
             )
+        # Drop the padding on each chunk, then stitch, match loudness, and resample.
         audio_opt = np.concatenate(audio_opt)
         if rms_mix_rate != 1:
             audio_opt = change_rms(audio, 16000, audio_opt, tgt_sr, rms_mix_rate)

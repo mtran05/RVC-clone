@@ -32,7 +32,14 @@ def convert_file(
     rms_mix_rate=0.25,
     output_sample_rate=0,
 ):
+    """Load a voice model and write one converted wav.
+
+    The audio is read at 16 kHz. Pitch, features, and the synthesizer run
+    through Pipeline. The wav sample rate stays at the model's rate unless
+    output_sample_rate is set.
+    """
     config = Config()
+    # The checkpoint says which synthesizer class and sample rate to use.
     net_g, checkpoint = get_synthesizer(str(model_path), config.device)
     if config.is_half:
         net_g = net_g.half()
@@ -41,6 +48,7 @@ def convert_file(
     use_f0 = checkpoint.get("f0", 1)
     hubert = load_hubert_model(config.device, config.is_half)
     pipeline = Pipeline(target_sr, config)
+    # HuBERT and the pitch models always see 16 kHz mono audio.
     audio, _ = librosa.load(input_path, sr=16000, mono=True)
     audio = audio.astype(np.float32)
     resample_sr = output_sample_rate or target_sr
@@ -75,6 +83,7 @@ def convert_file(
 
 
 def main(argv=None):
+    """Parse the offline CLI and convert one file."""
     parser = argparse.ArgumentParser(description="Offline RVC voice conversion")
     parser.add_argument("--model", required=True, help="Path to a trained .pth voice model")
     parser.add_argument("--index", default="", help="Optional .index retrieval file")

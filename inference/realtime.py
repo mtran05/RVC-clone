@@ -28,7 +28,10 @@ logger = logging.getLogger(__name__)
 
 
 class DeviceConfig:
+    """The two fields RVC reads from a config object."""
+
     def __init__(self, device, is_half):
+        """Store the inference device and whether the model runs in float16."""
         self.device = device
         self.is_half = is_half
 
@@ -50,6 +53,7 @@ class RealtimeConverter:
         extra_time=2.5,
         rms_mix_rate=0.0,
     ):
+        """Load the voice model and size the overlap buffers from the block settings."""
         self.f0_method = f0_method
         self.rms_mix_rate = rms_mix_rate
         self.device = infer_device
@@ -63,6 +67,7 @@ class RealtimeConverter:
             self.config,
         )
         self.sample_rate = int(sample_rate or self.rvc.tgt_sr)
+        # zc is 10 ms. Every block length is a multiple of that so pitch frames line up.
         self.zc = self.sample_rate // 100
         self.block_frame = int(np.round(block_time * self.sample_rate / self.zc)) * self.zc
         self.block_frame_16k = 160 * self.block_frame // self.zc
@@ -121,11 +126,13 @@ class RealtimeConverter:
         )
 
     def process_block(self, block):
+        """Convert one block and crossfade it onto the previous block."""
         block = np.asarray(block, dtype=np.float32).reshape(-1)
         if block.shape[0] != self.block_frame:
             raise ValueError(
                 f"Expected {self.block_frame} samples, received {block.shape[0]}"
             )
+        # Keep extra context in front of the new block, then resample that tail to 16 kHz.
         self.input_wav[: -self.block_frame] = self.input_wav[self.block_frame :].clone()
         self.input_wav[-self.block_frame :] = torch.from_numpy(block).to(self.device)
         self.input_wav_res[: -self.block_frame_16k] = self.input_wav_res[
@@ -146,6 +153,7 @@ class RealtimeConverter:
         if self.rms_mix_rate < 1:
             inferred = self._mix_volume_envelope(inferred)
 
+        # SOLA slides the new audio until it best matches the previous tail, then crossfades.
         window = self.sola_buffer_frame + self.sola_search_frame
         conv_input = inferred[None, None, :window]
         correlation = F.conv1d(conv_input, self.sola_buffer[None, None, :])
@@ -166,6 +174,7 @@ class RealtimeConverter:
         return inferred[: self.block_frame].detach().cpu().numpy()
 
     def _mix_volume_envelope(self, inferred):
+        """Pull the converted loudness toward the input block's envelope."""
         source = self.input_wav[self.extra_frame :]
         source = source[: inferred.shape[0]].detach().cpu().numpy()
         frame_length = 4 * self.zc
@@ -179,6 +188,7 @@ class RealtimeConverter:
         return inferred * torch.pow(rms_source / rms_output, 1 - self.rms_mix_rate)
 
     def convert(self, audio, sample_rate):
+        """Convert a whole array by the same block path used for live audio."""
         audio = np.asarray(audio, dtype=np.float32).reshape(-1)
         if sample_rate != self.sample_rate:
             audio = (
@@ -202,6 +212,7 @@ class RealtimeConverter:
 
 
 def _rms_envelope(audio, frame_length, hop_length, size):
+    """Return a per-sample RMS envelope aligned to audio."""
     import librosa
 
     rms = librosa.feature.rms(y=audio, frame_length=frame_length, hop_length=hop_length)
@@ -213,6 +224,7 @@ def _rms_envelope(audio, frame_length, hop_length, size):
 
 
 def _load_audio(path):
+    """Read a file as mono float32 and return it with its sample rate."""
     audio, sample_rate = sf.read(path, always_2d=False)
     audio = np.asarray(audio, dtype=np.float32)
     if audio.ndim == 2:
@@ -221,6 +233,7 @@ def _load_audio(path):
 
 
 def _build_converter(args):
+    """Build a RealtimeConverter from parsed CLI arguments."""
     index_rate = args.index_rate if args.index else 0.0
     return RealtimeConverter(
         model_path=args.model,
@@ -238,6 +251,7 @@ def _build_converter(args):
 
 
 def _convert_file(args):
+    """Convert --input and write --output."""
     converter = _build_converter(args)
     audio, sample_rate = _load_audio(args.input)
     converted = converter.convert(audio, sample_rate)
@@ -248,11 +262,13 @@ def _convert_file(args):
 
 
 def _run_live(args):
+    """Convert the default microphone and play it on the default speakers."""
     import sounddevice as sd
 
     converter = _build_converter(args)
 
     def callback(indata, outdata, frames, time_info, status):
+        """Convert one microphone block and copy it into the speaker buffer."""
         if status:
             logger.warning("Audio stream: %s", status)
         mono = np.mean(indata, axis=1) if indata.ndim == 2 else indata
@@ -281,12 +297,14 @@ def _run_live(args):
 
 
 def _list_devices():
+    """Print the input and output devices PortAudio can see."""
     import sounddevice as sd
 
     print(sd.query_devices())
 
 
 def main(argv=None):
+    """Parse the real-time CLI and run file mode, live mode, or device listing."""
     parser = argparse.ArgumentParser(description="Real-time RVC voice conversion")
     parser.add_argument("--model", help="Path to a trained .pth voice model")
     parser.add_argument("--index", help="Optional .index retrieval file")

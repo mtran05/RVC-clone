@@ -1,3 +1,5 @@
+"""FCPE pitch estimation, including a path that works on DirectML."""
+
 import torch
 
 from tools.cuda_graph import cuda_graph_enabled, run_cuda_graph
@@ -20,6 +22,7 @@ class FCPEInfer:
     """
 
     def __init__(self, device):
+        """Load the bundled FCPE model onto device, or split it for DirectML."""
         from torchfcpe import spawn_bundled_infer_model
 
         self.device = device
@@ -120,6 +123,7 @@ class FCPEInfer:
         decoder_mode="local_argmax",
         threshold=0.006,
     ):
+        """Return f0 in Hz for a mono waveform at the given sample rate."""
         if not self.is_directml:
             wav = wav.to(self.device)
             if cuda_graph_enabled(wav.device):
@@ -150,6 +154,7 @@ class FCPEInfer:
                 wav,
             )
 
+        # DirectML cannot run the complex STFT, so the mel stays on CPU.
         wav_cpu = wav.detach().to(device="cpu", dtype=torch.float32)
         mel_cpu = self.infer_model.wav2mel(wav_cpu, sr)
         mel_dml = mel_cpu.to(device=self.device, dtype=torch.float32)

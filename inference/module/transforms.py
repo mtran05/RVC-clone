@@ -1,3 +1,5 @@
+"""Rational-quadratic spline used by the synthesizer's normalizing flow."""
+
 import numpy as np
 import torch
 from torch.nn import functional as F
@@ -19,6 +21,7 @@ def piecewise_rational_quadratic_transform(
     min_bin_height=DEFAULT_MIN_BIN_HEIGHT,
     min_derivative=DEFAULT_MIN_DERIVATIVE,
 ):
+    """Map flow features through a spline, with or without linear tails."""
     if tails is None:
         spline_fn = rational_quadratic_spline
         spline_kwargs = {}
@@ -41,6 +44,7 @@ def piecewise_rational_quadratic_transform(
 
 
 def searchsorted(bin_locations, inputs, eps=1e-6):
+    """Return the bin index that contains each input value."""
     bin_locations[..., -1] += eps
     return torch.sum(inputs[..., None] >= bin_locations, dim=-1) - 1
 
@@ -57,6 +61,7 @@ def unconstrained_rational_quadratic_spline(
     min_bin_height=DEFAULT_MIN_BIN_HEIGHT,
     min_derivative=DEFAULT_MIN_DERIVATIVE,
 ):
+    """Apply the spline inside the bounds and leave the tails linear."""
     inside_interval_mask = (inputs >= -tail_bound) & (inputs <= tail_bound)
     outside_interval_mask = ~inside_interval_mask
 
@@ -109,6 +114,7 @@ def rational_quadratic_spline(
     min_bin_height=DEFAULT_MIN_BIN_HEIGHT,
     min_derivative=DEFAULT_MIN_DERIVATIVE,
 ):
+    """Evaluate one rational-quadratic spline bin, forward or inverse."""
     if torch.min(inputs) < left or torch.max(inputs) > right:
         raise ValueError("Input to a transform is not within its domain")
 
@@ -119,6 +125,7 @@ def rational_quadratic_spline(
     if min_bin_height * num_bins > 1.0:
         raise ValueError("Minimal bin height too large for the number of bins")
 
+    # Turn unconstrained network outputs into bin widths, heights, and slopes.
     widths = F.softmax(unnormalized_widths, dim=-1)
     widths = min_bin_width + (1 - min_bin_width * num_bins) * widths
     cumwidths = torch.cumsum(widths, dim=-1)

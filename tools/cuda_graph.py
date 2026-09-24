@@ -1,3 +1,10 @@
+"""Replay fixed-shape CUDA work instead of launching it again.
+
+HuBERT, pitch models, and the synthesizer call run_cuda_graph. The first
+call with a given shape is recorded. Later calls copy new audio into the
+recorded buffers and replay the graph.
+"""
+
 import logging
 import os
 import threading
@@ -16,12 +23,14 @@ _probe_result = None
 
 
 def _device_type(device):
+    """Return cuda, cpu, or privateuseone from a device or a device string."""
     if isinstance(device, torch.device):
         return device.type
     return str(device).split(":", 1)[0].lower()
 
 
 def _cuda_device(device):
+    """Return a CUDA device that has an explicit index."""
     parsed = device if isinstance(device, torch.device) else torch.device(device)
     if parsed.index is None:
         parsed = torch.device("cuda", torch.cuda.current_device())
@@ -29,6 +38,7 @@ def _cuda_device(device):
 
 
 def _clone_output(value):
+    """Copy graph output so the caller can keep it after the next replay."""
     if torch.is_tensor(value):
         return value.clone()
     if isinstance(value, tuple):
@@ -41,6 +51,7 @@ def _clone_output(value):
 
 
 def detect_cuda_graph_support(device):
+    """Return whether this GPU can capture and replay a tiny CUDA graph."""
     if _device_type(device) != "cuda" or not torch.cuda.is_available():
         return False
     if not hasattr(torch.cuda, "CUDAGraph") or not hasattr(torch.cuda, "graph"):
@@ -57,6 +68,7 @@ def detect_cuda_graph_support(device):
                     expected = probe.square().add_(1)
             current.wait_stream(warmup)
             torch.cuda.synchronize(cuda_device)
+            # Capture square-and-add, then replay it on a fresh input.
             graph = torch.cuda.CUDAGraph()
             with torch.cuda.graph(graph):
                 captured = probe.square() + 1
@@ -74,6 +86,7 @@ def detect_cuda_graph_support(device):
 
 
 def configure_cuda_graph(device):
+    """Turn CUDA graphs on unless RVC_CUDA_GRAPH=0 or the probe fails."""
     global _probe_result
     explicit = os.environ.get(ENV_NAME)
     if explicit in {"0", "1"}:
@@ -90,6 +103,7 @@ def configure_cuda_graph(device):
 
 
 def cuda_graph_enabled(device):
+    """Return whether replay is allowed for this device right now."""
     return (
         os.environ.get(ENV_NAME) == "1"
         and _device_type(device) == "cuda"
@@ -98,6 +112,7 @@ def cuda_graph_enabled(device):
 
 
 def _tensor_signature(tensor):
+    """Identify a tensor by shape, stride, dtype, device, and grad flag."""
     return (
         tuple(tensor.shape),
         tuple(tensor.stride()),
@@ -108,7 +123,10 @@ def _tensor_signature(tensor):
 
 
 class _CapturedCall:
+    """One recorded CUDA graph and the static buffers it reads and writes."""
+
     def __init__(self, function, inputs):
+        """Warm the kernels, then record function(*inputs) into a CUDA graph."""
         started = time.perf_counter()
         self.lock = threading.RLock()
         self.inputs = tuple(torch.empty_like(value) for value in inputs)
@@ -123,6 +141,7 @@ class _CapturedCall:
                 output = function(*self.inputs)
         current.wait_stream(warmup)
         torch.cuda.synchronize(device)
+        # The recorded call reads self.inputs and writes self.output.
         self.graph = torch.cuda.CUDAGraph()
         with torch.cuda.graph(self.graph), torch.no_grad():
             self.output = function(*self.inputs)
@@ -131,6 +150,7 @@ class _CapturedCall:
         del output
 
     def replay(self, inputs):
+        """Copy new inputs into the recorded buffers and run the graph."""
         with self.lock:
             stream = torch.cuda.current_stream(self.inputs[0].device)
             if self.done_event is not None:
@@ -145,7 +165,10 @@ class _CapturedCall:
 
 
 class _GraphCache:
+    """Keep a few recorded graphs and skip shapes that failed to capture."""
+
     def __init__(self):
+        """Start an empty cache and the counters used by get_cuda_graph_stats."""
         self.entries = OrderedDict()
         self.failures = set()
         self.lock = threading.RLock()
@@ -156,6 +179,7 @@ class _GraphCache:
         self.capture_ms = 0.0
 
     def run(self, key, function, inputs):
+        """Replay a cached graph, or capture one, or run the function eagerly."""
         signature = key + tuple(_tensor_signature(value) for value in inputs)
         with self.lock:
             if signature in self.failures:
@@ -186,6 +210,7 @@ class _GraphCache:
 
 
 def run_cuda_graph(owner, namespace, function, *inputs):
+    """Run function on CUDA via a graph cached on owner, or call it directly."""
     if not inputs or not cuda_graph_enabled(inputs[0].device):
         return function(*inputs)
     cache = getattr(owner, "_rvc_cuda_graph_cache", None)
@@ -196,6 +221,7 @@ def run_cuda_graph(owner, namespace, function, *inputs):
 
 
 def clear_cuda_graph_cache(owner):
+    """Drop every graph previously recorded on owner."""
     cache = getattr(owner, "_rvc_cuda_graph_cache", None)
     if cache is not None:
         cache.entries.clear()
@@ -204,6 +230,7 @@ def clear_cuda_graph_cache(owner):
 
 
 def get_cuda_graph_stats(owner):
+    """Return capture, replay, fallback, and eviction counts for owner."""
     cache = getattr(owner, "_rvc_cuda_graph_cache", None)
     if cache is None:
         return {

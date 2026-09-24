@@ -13,6 +13,7 @@ from inference.module.commons import init_weights
 logger = logging.getLogger(__name__)
 
 class TextEncoder(nn.Module):
+    """Turn HuBERT features and optional pitch into a latent distribution."""
     def __init__(
         self,
         in_channels,
@@ -25,6 +26,7 @@ class TextEncoder(nn.Module):
         p_dropout,
         f0=True,
     ):
+        """Build the feature embedding, optional pitch embedding, and transformer."""
         super(TextEncoder, self).__init__()
         self.out_channels = out_channels
         self.hidden_channels = hidden_channels
@@ -54,6 +56,7 @@ class TextEncoder(nn.Module):
         lengths,
         skip_head = None,
     ):
+        """Embed content and pitch, encode them, and predict mean and log variance."""
         if pitch is None:
             x = self.emb_phone(phone)
         else:
@@ -79,6 +82,7 @@ class TextEncoder(nn.Module):
 
 
 class ResidualCouplingBlock(nn.Module):
+    """Normalizing flow between the encoder distribution and the decoder."""
     def __init__(
         self,
         channels,
@@ -89,6 +93,7 @@ class ResidualCouplingBlock(nn.Module):
         n_flows=4,
         gin_channels=0,
     ):
+        """Stack coupling layers and channel flips."""
         super(ResidualCouplingBlock, self).__init__()
         self.channels = channels
         self.hidden_channels = hidden_channels
@@ -120,6 +125,7 @@ class ResidualCouplingBlock(nn.Module):
         g = None,
         reverse = False,
     ):
+        """Run the flow forward, or backward when reverse is set."""
         if not reverse:
             for flow in self.flows:
                 x, _ = flow(x, x_mask, g=g, reverse=reverse)
@@ -129,10 +135,12 @@ class ResidualCouplingBlock(nn.Module):
         return x
 
     def remove_weight_norm(self):
+        """Drop weight norm from every coupling layer before inference."""
         for i in range(self.n_flows):
             self.flows[i * 2].remove_weight_norm()
 
 class Generator(torch.nn.Module):
+    """HiFi-GAN decoder used by models that have no pitch input."""
     def __init__(
         self,
         initial_channel,
@@ -144,6 +152,7 @@ class Generator(torch.nn.Module):
         upsample_kernel_sizes,
         gin_channels=0,
     ):
+        """Build the upsampling stack and the residual blocks."""
         super(Generator, self).__init__()
         self.num_kernels = len(resblock_kernel_sizes)
         self.num_upsamples = len(upsample_rates)
@@ -186,6 +195,7 @@ class Generator(torch.nn.Module):
         g = None,
         n_res = None,
     ):
+        """Turn a latent sequence into a waveform."""
         if n_res is not None:
             n = int(n_res.item()) if isinstance(n_res, torch.Tensor) else int(n_res)
             if n != x.shape[-1]:
@@ -211,6 +221,7 @@ class Generator(torch.nn.Module):
         return x
 
     def remove_weight_norm(self):
+        """Drop weight norm from the upsampling and residual convolutions."""
         for l in self.ups:
             remove_weight_norm(l)
         for l in self.resblocks:
@@ -242,6 +253,7 @@ class SineGen(torch.nn.Module):
         voiced_threshold=0,
         flag_for_pulse=False,
     ):
+        """Store the harmonic count and the voicing threshold."""
         super(SineGen, self).__init__()
         self.sine_amp = sine_amp
         self.noise_std = noise_std
@@ -252,6 +264,7 @@ class SineGen(torch.nn.Module):
 
     def _f02uv(self, f0):
         # generate uv signal
+        """Mark frames below the voicing threshold as unvoiced."""
         uv = torch.ones_like(f0)
         uv = uv * (f0 > self.voiced_threshold)
         if uv.device.type == "privateuseone":  # for DirectML
@@ -342,6 +355,7 @@ class SourceModuleHnNSF(torch.nn.Module):
         voiced_threshod=0,
         is_half=True,
     ):
+        """Build the sine generator and the linear merge that follows it."""
         super(SourceModuleHnNSF, self).__init__()
 
         self.sine_amp = sine_amp
@@ -360,6 +374,7 @@ class SourceModuleHnNSF(torch.nn.Module):
     def forward(self, x, upp = 1):
         # if self.ddtype ==-1:
         #     self.ddtype = self.l_linear.weight.dtype
+        """Turn an f0 contour into the excitation the NSF decoder adds in."""
         sine_wavs, uv, _ = self.l_sin_gen(x, upp)
         # print(x.dtype,sine_wavs.dtype,self.l_linear.weight.dtype)
         # if self.is_half:
@@ -373,6 +388,7 @@ class SourceModuleHnNSF(torch.nn.Module):
 
 
 class GeneratorNSF(torch.nn.Module):
+    """HiFi-GAN decoder that adds a sine-excitation source at each upsample."""
     def __init__(
         self,
         initial_channel,
@@ -386,6 +402,7 @@ class GeneratorNSF(torch.nn.Module):
         sr,
         is_half=False,
     ):
+        """Build the upsampling stack, the noise filters, and the sine source."""
         super(GeneratorNSF, self).__init__()
         self.num_kernels = len(resblock_kernel_sizes)
         self.num_upsamples = len(upsample_rates)
@@ -453,6 +470,7 @@ class GeneratorNSF(torch.nn.Module):
         g = None,
         n_res = None,
     ):
+        """Decode a latent sequence plus f0 into a waveform."""
         har_source, noi_source, uv = self.m_source(f0, self.upp)
         har_source = har_source.transpose(1, 2)
         if n_res is not None:
@@ -487,6 +505,7 @@ class GeneratorNSF(torch.nn.Module):
         return x
 
     def remove_weight_norm(self):
+        """Drop weight norm from the upsampling and residual convolutions."""
         for l in self.ups:
             remove_weight_norm(l)
         for l in self.resblocks:
@@ -500,6 +519,7 @@ sr2sr = {
 
 
 class SynthesizerTrnMs256NSFsid(nn.Module):
+    """v1 voice model: 256-D features, pitch, and a speaker embedding."""
     def __init__(
         self,
         spec_channels,
@@ -522,6 +542,7 @@ class SynthesizerTrnMs256NSFsid(nn.Module):
         sr,
         **kwargs
     ):
+        """Build the text encoder, flow, NSF decoder, and speaker embedding."""
         super(SynthesizerTrnMs256NSFsid, self).__init__()
         if isinstance(sr, str):
             sr = sr2sr[sr]
@@ -577,6 +598,7 @@ class SynthesizerTrnMs256NSFsid(nn.Module):
         )
 
     def remove_weight_norm(self):
+        """Drop weight norm from the decoder and the flow."""
         self.dec.remove_weight_norm()
         self.flow.remove_weight_norm()
 
@@ -591,8 +613,11 @@ class SynthesizerTrnMs256NSFsid(nn.Module):
         return_length = None,
         return_length2 = None,
     ):
+        """Sample a latent and decode it to audio. This is the inference forward."""
+        # Speaker embedding conditions the flow and the decoder.
         g = self.emb_g(sid).unsqueeze(-1)
         if skip_head is not None and return_length is not None:
+            # Real-time keeps a little extra context for the flow, then crops it.
             head = int(skip_head.item()) if isinstance(skip_head, torch.Tensor) else int(skip_head)
             length = (
                 int(return_length.item())
@@ -602,6 +627,7 @@ class SynthesizerTrnMs256NSFsid(nn.Module):
             flow_head = max(head - 24, 0)
             dec_head = head - flow_head
             m_p, logs_p, x_mask = self.enc_p(phone, pitch, phone_lengths, flow_head)
+            # Sample around the predicted mean, then invert the flow to get decoder latents.
             z_p = (m_p + torch.exp(logs_p) * torch.randn_like(m_p) * 0.66666) * x_mask
             z = self.flow(z_p, x_mask, g=g, reverse=True)
             z = z[:, :, dec_head : dec_head + length]
@@ -616,6 +642,7 @@ class SynthesizerTrnMs256NSFsid(nn.Module):
 
 
 class SynthesizerTrnMs768NSFsid(SynthesizerTrnMs256NSFsid):
+    """v2 voice model: 768-D HuBERT features instead of 256-D."""
     def __init__(
         self,
         spec_channels,
@@ -638,6 +665,7 @@ class SynthesizerTrnMs768NSFsid(SynthesizerTrnMs256NSFsid):
         sr,
         **kwargs
     ):
+        """Same network as v1, with a wider content embedding."""
         super(SynthesizerTrnMs768NSFsid, self).__init__(
             spec_channels,
             segment_size,
@@ -673,6 +701,7 @@ class SynthesizerTrnMs768NSFsid(SynthesizerTrnMs256NSFsid):
 
 
 class SynthesizerTrnMs256NSFsid_nono(nn.Module):
+    """v1 voice model for checkpoints trained without pitch."""
     def __init__(
         self,
         spec_channels,
@@ -695,6 +724,7 @@ class SynthesizerTrnMs256NSFsid_nono(nn.Module):
         sr=None,
         **kwargs
     ):
+        """Build the text encoder, flow, and a decoder with no sine source."""
         super(SynthesizerTrnMs256NSFsid_nono, self).__init__()
         self.spec_channels = spec_channels
         self.inter_channels = inter_channels
@@ -747,6 +777,7 @@ class SynthesizerTrnMs256NSFsid_nono(nn.Module):
         )
 
     def remove_weight_norm(self):
+        """Drop weight norm from the decoder and the flow."""
         self.dec.remove_weight_norm()
         self.flow.remove_weight_norm()
 
@@ -759,6 +790,7 @@ class SynthesizerTrnMs256NSFsid_nono(nn.Module):
         return_length = None,
         return_length2 = None,
     ):
+        """Sample a latent and decode it to audio without pitch."""
         g = self.emb_g(sid).unsqueeze(-1)
         if skip_head is not None and return_length is not None:
             head = int(skip_head.item()) if isinstance(skip_head, torch.Tensor) else int(skip_head)
@@ -770,6 +802,7 @@ class SynthesizerTrnMs256NSFsid_nono(nn.Module):
             flow_head = max(head - 24, 0)
             dec_head = head - flow_head
             m_p, logs_p, x_mask = self.enc_p(phone, None, phone_lengths, flow_head)
+            # Sample around the predicted mean, then invert the flow to get decoder latents.
             z_p = (m_p + torch.exp(logs_p) * torch.randn_like(m_p) * 0.66666) * x_mask
             z = self.flow(z_p, x_mask, g=g, reverse=True)
             z = z[:, :, dec_head : dec_head + length]
@@ -783,6 +816,7 @@ class SynthesizerTrnMs256NSFsid_nono(nn.Module):
 
 
 class SynthesizerTrnMs768NSFsid_nono(SynthesizerTrnMs256NSFsid_nono):
+    """v2 voice model for checkpoints trained without pitch."""
     def __init__(
         self,
         spec_channels,
@@ -805,6 +839,7 @@ class SynthesizerTrnMs768NSFsid_nono(SynthesizerTrnMs256NSFsid_nono):
         sr=None,
         **kwargs
     ):
+        """Same no-pitch network as v1, with a wider content embedding."""
         super(SynthesizerTrnMs768NSFsid_nono, self).__init__(
             spec_channels,
             segment_size,

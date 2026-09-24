@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class STFT(torch.nn.Module):
+    """Short-time Fourier transform used to build the RMVPE mel spectrogram."""
     def __init__(
         self, filter_length=1024, hop_length=512, win_length=None, window="hann"
     ):
@@ -146,7 +147,9 @@ class STFT(torch.nn.Module):
 
 
 class BiGRU(nn.Module):
+    """Bidirectional GRU on top of the U-Net pitch features."""
     def __init__(self, input_features, hidden_features, num_layers):
+        """Stack a bidirectional GRU and a linear projection."""
         super(BiGRU, self).__init__()
         self.gru = nn.GRU(
             input_features,
@@ -157,11 +160,14 @@ class BiGRU(nn.Module):
         )
 
     def forward(self, x):
+        """Run the GRU and project every frame."""
         return self.gru(x)[0]
 
 
 class ConvBlockRes(nn.Module):
+    """Two convolutions with a residual shortcut."""
     def __init__(self, in_channels, out_channels, momentum=0.01):
+        """Build the conv block and a 1x1 shortcut when the channel count changes."""
         super(ConvBlockRes, self).__init__()
         self.conv = nn.Sequential(
             nn.Conv2d(
@@ -189,6 +195,7 @@ class ConvBlockRes(nn.Module):
             self.shortcut = nn.Conv2d(in_channels, out_channels, (1, 1))
 
     def forward(self, x):
+        """Add the shortcut to the convolved features."""
         if not hasattr(self, "shortcut"):
             return self.conv(x) + x
         else:
@@ -196,6 +203,7 @@ class ConvBlockRes(nn.Module):
 
 
 class Encoder(nn.Module):
+    """Downsampling tower of residual conv blocks."""
     def __init__(
         self,
         in_channels,
@@ -206,6 +214,7 @@ class Encoder(nn.Module):
         out_channels=16,
         momentum=0.01,
     ):
+        """Stack residual blocks that halve the time and frequency axes."""
         super(Encoder, self).__init__()
         self.n_encoders = n_encoders
         self.bn = nn.BatchNorm2d(in_channels, momentum=momentum)
@@ -225,6 +234,7 @@ class Encoder(nn.Module):
         self.out_channel = out_channels
 
     def forward(self, x):
+        """Return the downsampled features and the skip tensors for the decoder."""
         concat_tensors = []
         x = self.bn(x)
         for i, layer in enumerate(self.layers):
@@ -234,9 +244,11 @@ class Encoder(nn.Module):
 
 
 class ResEncoderBlock(nn.Module):
+    """One residual block followed by average pooling."""
     def __init__(
         self, in_channels, out_channels, kernel_size, n_blocks=1, momentum=0.01
     ):
+        """Build n_blocks residual convs and a pool with the given stride."""
         super(ResEncoderBlock, self).__init__()
         self.n_blocks = n_blocks
         self.conv = nn.ModuleList()
@@ -248,6 +260,7 @@ class ResEncoderBlock(nn.Module):
             self.pool = nn.AvgPool2d(kernel_size=kernel_size)
 
     def forward(self, x):
+        """Apply the residual convs, then downsample."""
         for i, conv in enumerate(self.conv):
             x = conv(x)
         if self.kernel_size is not None:
@@ -257,7 +270,9 @@ class ResEncoderBlock(nn.Module):
 
 
 class Intermediate(nn.Module):  #
+    """Bottleneck residual blocks between the encoder and decoder."""
     def __init__(self, in_channels, out_channels, n_inters, n_blocks, momentum=0.01):
+        """Stack residual blocks at the smallest U-Net resolution."""
         super(Intermediate, self).__init__()
         self.n_inters = n_inters
         self.layers = nn.ModuleList()
@@ -270,13 +285,16 @@ class Intermediate(nn.Module):  #
             )
 
     def forward(self, x):
+        """Run the bottleneck blocks."""
         for i, layer in enumerate(self.layers):
             x = layer(x)
         return x
 
 
 class ResDecoderBlock(nn.Module):
+    """Upsample, concatenate an encoder skip, then apply residual convs."""
     def __init__(self, in_channels, out_channels, stride, n_blocks=1, momentum=0.01):
+        """Build the transposed conv and the residual blocks after it."""
         super(ResDecoderBlock, self).__init__()
         out_padding = (0, 1) if stride == (1, 2) else (1, 1)
         self.n_blocks = n_blocks
@@ -299,6 +317,7 @@ class ResDecoderBlock(nn.Module):
             self.conv2.append(ConvBlockRes(out_channels, out_channels, momentum))
 
     def forward(self, x, concat_tensor):
+        """Upsample x, join concat_tensor, and run the residual blocks."""
         x = self.conv1(x)
         x = torch.cat((x, concat_tensor), dim=1)
         for i, conv2 in enumerate(self.conv2):
@@ -307,7 +326,9 @@ class ResDecoderBlock(nn.Module):
 
 
 class Decoder(nn.Module):
+    """Upsampling tower that rebuilds the pitch map."""
     def __init__(self, in_channels, n_decoders, stride, n_blocks, momentum=0.01):
+        """Stack decoder blocks that undo the encoder strides."""
         super(Decoder, self).__init__()
         self.layers = nn.ModuleList()
         self.n_decoders = n_decoders
@@ -319,12 +340,14 @@ class Decoder(nn.Module):
             in_channels = out_channels
 
     def forward(self, x, concat_tensors):
+        """Walk the skip tensors from deepest to shallowest."""
         for i, layer in enumerate(self.layers):
             x = layer(x, concat_tensors[-1 - i])
         return x
 
 
 class DeepUnet(nn.Module):
+    """U-Net that turns a mel spectrogram into a pitch salience map."""
     def __init__(
         self,
         kernel_size,
@@ -334,6 +357,7 @@ class DeepUnet(nn.Module):
         in_channels=1,
         en_out_channels=16,
     ):
+        """Build the encoder, bottleneck, and decoder."""
         super(DeepUnet, self).__init__()
         self.encoder = Encoder(
             in_channels, 128, en_de_layers, kernel_size, n_blocks, en_out_channels
@@ -349,6 +373,7 @@ class DeepUnet(nn.Module):
         )
 
     def forward(self, x) :
+        """Encode, run the bottleneck, and decode with skip connections."""
         x, concat_tensors = self.encoder(x)
         x = self.intermediate(x)
         x = self.decoder(x, concat_tensors)
@@ -356,6 +381,7 @@ class DeepUnet(nn.Module):
 
 
 class E2E(nn.Module):
+    """Full RMVPE network: mel channels in, pitch salience out."""
     def __init__(
         self,
         n_blocks,
@@ -366,6 +392,7 @@ class E2E(nn.Module):
         in_channels=1,
         en_out_channels=16,
     ):
+        """Build the U-Net, a small CNN head, and the final GRU."""
         super(E2E, self).__init__()
         self.unet = DeepUnet(
             kernel_size,
@@ -390,6 +417,7 @@ class E2E(nn.Module):
 
     def forward(self, mel):
         # print(mel.shape)
+        """Predict a salience distribution over pitch bins for each frame."""
         mel = mel.transpose(-1, -2).unsqueeze(1)
         x = self.cnn(self.unet(mel)).transpose(1, 2).flatten(-2)
         x = self.fc(x)
@@ -398,6 +426,7 @@ class E2E(nn.Module):
 
 
 class MelSpectrogram(torch.nn.Module):
+    """Log-mel front end for 16 kHz audio."""
     def __init__(
         self,
         is_half,
@@ -410,6 +439,7 @@ class MelSpectrogram(torch.nn.Module):
         mel_fmax=None,
         clamp=1e-5,
     ):
+        """Cache the mel filter, window, and STFT sizes."""
         super().__init__()
         n_fft = win_length if n_fft is None else n_fft
         self.hann_window = {}
@@ -432,6 +462,7 @@ class MelSpectrogram(torch.nn.Module):
         self.is_half = is_half
 
     def forward(self, audio, keyshift=0, speed=1, center=True):
+        """Compute a clamped log-mel spectrogram, with optional key shift."""
         factor = 2 ** (keyshift / 12)
         n_fft_new = int(np.round(self.n_fft * factor))
         win_length_new = int(np.round(self.win_length * factor))
@@ -475,7 +506,9 @@ class MelSpectrogram(torch.nn.Module):
 
 
 class RMVPE:
+    """Pitch estimator. Audio in, fundamental frequency in Hz out."""
     def __init__(self, model_path, is_half, device=None):
+        """Load the mel front end and the E2E weights, or an ONNX session on DirectML."""
         self.resample_kernel = {}
         self.resample_kernel = {}
         if isinstance(is_half, str):
@@ -515,6 +548,7 @@ class RMVPE:
                 self.device = torch.device("cuda:0")
 
             def get_default_model():
+                """Build the E2E network and load the checkpoint weights."""
                 model = E2E(4, 1, (2, 2))
                 ckpt = torch.load(model_path, map_location="cpu")
                 model.load_state_dict(ckpt)
@@ -532,6 +566,7 @@ class RMVPE:
         self.cents_mapping = np.pad(cents_mapping, (4, 4))  # 368
 
     def mel2hidden(self, mel):
+        """Run the salience network on one mel spectrogram."""
         with torch.no_grad():
             n_frames = mel.shape[-1]
             n_pad = 32 * ((n_frames - 1) // 32 + 1) - n_frames
@@ -555,6 +590,7 @@ class RMVPE:
             return hidden[:, :n_frames]
 
     def extract_mel(self, audio, center=True):
+        """Turn a waveform into the log-mel the network expects."""
         if not torch.is_tensor(audio):
             audio = torch.from_numpy(audio)
         audio = audio.float().to(self.device)
@@ -570,6 +606,7 @@ class RMVPE:
         )
 
     def decode(self, hidden, thred=0.03):
+        """Turn a salience map into an f0 contour in Hz. Silent frames stay 0."""
         cents_pred = self.to_local_average_cents(hidden, thred=thred)
         f0 = 10 * (2 ** (cents_pred / 1200))
         f0[f0 == 10] = 0
@@ -577,16 +614,9 @@ class RMVPE:
         return f0
 
     def infer_from_audio(self, audio, thred=0.03):
-        # torch.cuda.synchronize()
-        # t0 = ttime()
+        """Estimate f0 for one waveform."""
         mel = self.extract_mel(audio, center=True)
-        # print(123123123,mel.device.type)
-        # torch.cuda.synchronize()
-        # t1 = ttime()
         hidden = self.mel2hidden(mel)
-        # torch.cuda.synchronize()
-        # t2 = ttime()
-        # print(234234,hidden.device.type)
         if "privateuseone" not in str(self.device):
             hidden = hidden.squeeze(0).cpu().numpy()
         else:
@@ -594,17 +624,14 @@ class RMVPE:
         if self.is_half == True:
             hidden = hidden.astype("float32")
 
+        # Frames whose peak salience is below thred become unvoiced (f0 = 0).
         f0 = self.decode(hidden, thred=thred)
-        # torch.cuda.synchronize()
-        # t3 = ttime()
-        # print("hmvpe:%s\t%s\t%s\t%s"%(t1-t0,t2-t1,t3-t2,t3-t0))
         return f0
 
     def to_local_average_cents(self, salience, thred=0.05):
-        # t0 = ttime()
-        center = np.argmax(salience, axis=1)  # frame count, peak bin
-        salience = np.pad(salience, ((0, 0), (4, 4)))  # frame count, 368 bins
-        # t1 = ttime()
+        """Convert each frame's peak bin into cents using its neighbors."""
+        center = np.argmax(salience, axis=1)
+        salience = np.pad(salience, ((0, 0), (4, 4)))
         center += 4
         todo_salience = []
         todo_cents_mapping = []
@@ -613,17 +640,14 @@ class RMVPE:
         for idx in range(salience.shape[0]):
             todo_salience.append(salience[:, starts[idx] : ends[idx]][idx])
             todo_cents_mapping.append(self.cents_mapping[starts[idx] : ends[idx]])
-        # t2 = ttime()
-        todo_salience = np.array(todo_salience)  # frame count, 9
-        todo_cents_mapping = np.array(todo_cents_mapping)  # frame count, 9
+        # Weighted average of the nine bins around the peak.
+        todo_salience = np.array(todo_salience)
+        todo_cents_mapping = np.array(todo_cents_mapping)
         product_sum = np.sum(todo_salience * todo_cents_mapping, 1)
-        weight_sum = np.sum(todo_salience, 1)  # frame count
-        devided = product_sum / weight_sum  # frame count
-        # t3 = ttime()
-        maxx = np.max(salience, axis=1)  # frame count
+        weight_sum = np.sum(todo_salience, 1)
+        devided = product_sum / weight_sum
+        maxx = np.max(salience, axis=1)
         devided[maxx <= thred] = 0
-        # t4 = ttime()
-        # print("decode:%s\t%s\t%s\t%s" % (t1 - t0, t2 - t1, t3 - t2, t4 - t3))
         return devided
 
 
