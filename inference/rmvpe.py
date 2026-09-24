@@ -1,16 +1,16 @@
+import logging
 import os
-from typing import List, Optional, Tuple
+from time import time as ttime
+
 import numpy as np
 import torch
-
 import torch.nn as nn
 import torch.nn.functional as F
-from librosa.util import normalize, pad_center, tiny
+from librosa.filters import mel
+from librosa.util import pad_center
 from scipy.signal import get_window
 
 from tools.cuda_graph import run_cuda_graph
-
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -145,9 +145,6 @@ class STFT(torch.nn.Module):
         return reconstruction
 
 
-from time import time as ttime
-
-
 class BiGRU(nn.Module):
     def __init__(self, input_features, hidden_features, num_layers):
         super(BiGRU, self).__init__()
@@ -188,7 +185,6 @@ class ConvBlockRes(nn.Module):
             nn.BatchNorm2d(out_channels, momentum=momentum),
             nn.ReLU(),
         )
-        # self.shortcut:Optional[nn.Module] = None
         if in_channels != out_channels:
             self.shortcut = nn.Conv2d(in_channels, out_channels, (1, 1))
 
@@ -399,9 +395,6 @@ class E2E(nn.Module):
         x = self.fc(x)
         # print(x.shape)
         return x
-
-
-from librosa.filters import mel
 
 
 class MelSpectrogram(torch.nn.Module):

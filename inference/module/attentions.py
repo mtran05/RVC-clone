@@ -1,13 +1,9 @@
-import copy
 import math
-from typing import Optional
 
-import numpy as np
 import torch
 from torch import nn
 from torch.nn import functional as F
 
-from inference.module import modules
 from inference.module.modules import LayerNorm
 
 
