@@ -22,6 +22,22 @@ python -m pip install torch==2.7.1+cu128 torchaudio==2.7.1+cu128 --index-url htt
 python -m pip install -r requirements.txt
 ```
 
-### External files
+### Download models
 
-You need to get `ffmpeg.exe` and `ffprobe.exe` also.
+```bash
+python -m pip install --upgrade huggingface_hub
+
+# Required for inference and feature extraction
+hf download lj1995/VoiceConversionWebUI --revision main --include "hubert_base/*" --local-dir assets
+hf download lj1995/VoiceConversionWebUI rmvpe.pt --revision main --local-dir assets/rmvpe
+
+# Required only for pymss/MSST vocal separation
+hf download lj1995/VoiceConversionWebUI --revision main --include "pymss_weights/*" --local-dir assets
+```
+
+### FFmpeg
+
+On Windows, place these files in the repository root:
+
+- [ffmpeg.exe](https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/main/ffmpeg.exe?download=true)
+- [ffprobe.exe](https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/main/ffprobe.exe?download=true)
