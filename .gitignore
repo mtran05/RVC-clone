@@ -1,4 +1,6 @@
 .venv/
+RVC WebUI/
+assets/
 
 ffmpeg.exe
 ffprobe.exe

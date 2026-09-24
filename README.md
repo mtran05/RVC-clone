@@ -21,3 +21,7 @@ python -m venv .venv
 python -m pip install torch==2.7.1+cu128 torchaudio==2.7.1+cu128 --index-url https://download.pytorch.org/whl/cu128 --extra-index-url https://pypi.org/simple
 python -m pip install -r requirements.txt
 ```
+
+### External files
+
+You need to get `ffmpeg.exe` and `ffprobe.exe` also.
