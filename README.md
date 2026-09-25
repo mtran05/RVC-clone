@@ -41,3 +41,9 @@ On Windows, place these files in the repository root:
 
 - [ffmpeg.exe](https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/main/ffmpeg.exe?download=true)
 - [ffprobe.exe](https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/main/ffprobe.exe?download=true)
+
+### Testing Real-time RVC
+
+```bash
+.venv\Scripts\python.exe -m inference.realtime --model assets/weights/kikiV1.pth --index assets/indices/kikiV1.index --live
+```
