@@ -35,13 +35,6 @@ hf download lj1995/VoiceConversionWebUI rmvpe.pt --revision main --local-dir ass
 hf download lj1995/VoiceConversionWebUI --revision main --include "pymss_weights/*" --local-dir assets
 ```
 
-### FFmpeg
-
-On Windows, place these files in the repository root:
-
-- [ffmpeg.exe](https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/main/ffmpeg.exe?download=true)
-- [ffprobe.exe](https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/main/ffprobe.exe?download=true)
-
 ### Testing Real-time RVC
 
 ```bash

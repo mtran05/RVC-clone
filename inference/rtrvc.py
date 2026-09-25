@@ -79,6 +79,9 @@ class RVC:
             self.formant_shift = formant
             self.f0_min = 50
             self.f0_max = 1100
+            self.rmvpe_threshold = 0.03
+            self.fcpe_threshold = 0.006
+            self.index_neighbors = 8
             self.f0_mel_min = 1127 * np.log(1 + self.f0_min / 700)
             self.f0_mel_max = 1127 * np.log(1 + self.f0_max / 700)
             self.is_half = config.is_half
@@ -174,14 +177,14 @@ class RVC:
         # Parselmouth needs padding so the first pitch frame lines up with the audio.
         x = x.cpu().numpy()
         p_len = x.shape[0] // 160 + 1
-        f0_min = 65
+        f0_min = self.f0_min
         l_pad = int(np.ceil(1.5 / f0_min * 16000))
         r_pad = l_pad + 1
         sound = parselmouth.Sound(np.pad(x, (l_pad, r_pad)), 16000).to_pitch_ac(
             time_step=0.01,
             voicing_threshold=0.6,
             pitch_floor=f0_min,
-            pitch_ceiling=1100,
+            pitch_ceiling=self.f0_max,
         )
         if abs(sound.t1 - 1.5 / f0_min) >= 0.001:
             raise RuntimeError("Parselmouth pitch window does not match the padding")
@@ -202,7 +205,7 @@ class RVC:
                 is_half=self.is_half,
                 device=self.device,
             )
-        f0 = self.model_rmvpe.infer_from_audio(x, thred=0.03)
+        f0 = self.model_rmvpe.infer_from_audio(x, thred=self.rmvpe_threshold)
         return self._shift_f0(f0, f0_up_key)
 
     def get_f0_fcpe(self, x, f0_up_key):
@@ -217,7 +220,7 @@ class RVC:
                 x.unsqueeze(0).float(),
                 sr=16000,
                 decoder_mode="local_argmax",
-                threshold=0.006,
+                threshold=self.fcpe_threshold,
             )
             .squeeze()
             .detach()
@@ -271,7 +274,7 @@ class RVC:
             # Blend HuBERT features toward the nearest stored voice vectors.
             if hasattr(self, "index") and self.index_rate != 0:
                 npy = feats[0][skip_head // 2 :].cpu().numpy().astype("float32")
-                score, ix = self.index.search(npy, k=8)
+                score, ix = self.index.search(npy, k=self.index_neighbors)
                 if (ix >= 0).all():
                     weight = np.square(1 / score)
                     weight /= weight.sum(axis=1, keepdims=True)
