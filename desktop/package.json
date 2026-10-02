@@ -1,0 +1,42 @@
+{
+  "name": "rvc-realtime",
+  "version": "1.0.0",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "prestart": "node ensure-electron.js",
+    "start": "electron .",
+    "check": "node args.js && node repo.js",
+    "pack": "electron-builder --win portable"
+  },
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "local.rvc.realtime",
+    "productName": "RVC",
+    "asar": true,
+    "npmRebuild": false,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "args.js",
+      "repo.js",
+      "index.html",
+      "renderer.js",
+      "styles.css",
+      "package.json"
+    ],
+    "win": {
+      "target": "portable",
+      "signAndEditExecutable": false
+    },
+    "portable": {
+      "artifactName": "RVC.exe"
+    }
+  }
+}

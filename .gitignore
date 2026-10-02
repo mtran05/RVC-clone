@@ -1,3 +1,7 @@
 .venv/
 RVC WebUI/
 assets/
+graphify-out/
+desktop/node_modules/
+desktop/dist/
+**/__pycache__/

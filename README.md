@@ -40,3 +40,25 @@ hf download lj1995/VoiceConversionWebUI --revision main --include "pymss_weights
 ```bash
 .venv\Scripts\python.exe -m inference.realtime --model assets/weights/kikiV1.pth --index assets/indices/kikiV1.index --live
 ```
+
+## Desktop UI
+
+The live window uses the same options as `inference.realtime --live`. Finish the setup above first. The window does not install Python or the voice models.
+
+Build the exe once:
+
+```powershell
+cd desktop
+npm install
+npm run pack
+```
+
+Run `desktop\dist\RVC.exe`. Leave that file in `desktop\dist`. It looks upward for this folder and runs `.venv\Scripts\python.exe`. Put `.pth` models in `assets\weights` and `.index` files in `assets\indices`, or browse to them.
+
+To open the window without building the exe:
+
+```powershell
+cd desktop
+npm install
+npm start
+```
