@@ -116,6 +116,7 @@ function createWindow() {
     backgroundColor: "#12181c",
     autoHideMenuBar: true,
     title: "RVC",
+    icon: path.join(__dirname, "logo.png"),
     show: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),

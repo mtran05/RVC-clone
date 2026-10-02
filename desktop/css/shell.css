@@ -23,6 +23,14 @@
   border-right: 1px solid var(--hair);
 }
 
+.brand {
+  margin: 0 0 14px;
+  display: flex;
+  justify-content: center;
+}
+
+.brand img { display: block; width: 36px; height: 36px; }
+
 .rail-link {
   width: 100%;
   border: 0;

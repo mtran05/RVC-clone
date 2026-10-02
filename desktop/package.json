@@ -30,9 +30,12 @@
       "renderer.js",
       "styles.css",
       "css/**/*.css",
+      "logo.svg",
+      "logo.png",
       "package.json"
     ],
     "win": {
+      "icon": "logo.png",
       "target": "portable",
       "signAndEditExecutable": false
     },
