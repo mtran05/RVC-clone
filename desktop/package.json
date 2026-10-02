@@ -1,0 +1,45 @@
+{
+  "name": "overtone",
+  "version": "1.0.0",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "prestart": "node ensure-electron.js",
+    "start": "electron .",
+    "check": "node args.js && node repo.js",
+    "renderer:build": "npm --prefix renderer run build",
+    "dev": "npm --prefix renderer run dev",
+    "pack": "npm run renderer:build && electron-builder --win portable"
+  },
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "local.overtone",
+    "productName": "Overtone",
+    "asar": true,
+    "npmRebuild": false,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "args.js",
+      "repo.js",
+      "renderer/dist/**/*",
+      "logo.svg",
+      "logo.png",
+      "package.json"
+    ],
+    "win": {
+      "icon": "logo.png",
+      "target": "portable",
+      "signAndEditExecutable": false
+    },
+    "portable": {
+      "artifactName": "Overtone.exe"
+    }
+  }
+}

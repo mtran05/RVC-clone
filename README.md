@@ -1,8 +1,8 @@
-# RVC-clone
+# Overtone
 
-RVC clone with improvement (maybe)
+Real-time voice conversion client for RVC models. Speak into your mic and hear the converted voice live, from the command line or a desktop app.
 
-Inspired by [RVC WebUI](https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI)
+Based on [RVC WebUI](https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI).
 
 ## Setup
 
@@ -40,3 +40,38 @@ hf download lj1995/VoiceConversionWebUI --revision main --include "pymss_weights
 ```bash
 .venv\Scripts\python.exe -m inference.realtime --model assets/weights/kikiV1.pth --index assets/indices/kikiV1.index --live
 ```
+
+## Desktop UI
+
+The live window uses the same options as `inference.realtime --live`. Finish the setup above first. The window does not install Python or the voice models.
+
+Build the exe once (this also builds the React front-end):
+
+```powershell
+cd desktop
+npm install
+npm --prefix renderer install
+npm run pack
+```
+
+Run `desktop\dist\Overtone.exe`. Leave that file in `desktop\dist`. It looks upward for this folder and runs `.venv\Scripts\python.exe`. Put `.pth` models in `assets\weights` and `.index` files in `assets\indices`, or browse to them.
+
+To open the window without building the exe:
+
+```powershell
+cd desktop
+npm install
+npm --prefix renderer install
+npm run renderer:build
+npm start
+```
+
+For front-end development with live reload, run the Vite dev server and point Electron at it:
+
+```powershell
+cd desktop
+npm run dev                          # in one terminal
+$env:VITE_DEV_SERVER_URL="http://localhost:5173"; npm start   # in another
+```
+
+The front-end source is React + TypeScript in `desktop\renderer`. The Electron main/preload processes are still plain JavaScript (`desktop\main.js`, `desktop\preload.js`).

@@ -1,0 +1,83 @@
+:root {
+  color-scheme: dark;
+  --bezel: #12181c;
+  --well: #0c1114;
+  --inset: #182126;
+  --ink: #d7e0e4;
+  --dim: #8b99a1;
+  --hair: #314049;
+  --filament: #e25a32;
+  --filament-ink: #ffb089;
+  --display: "Sitka Display", "Sitka Banner", Constantia, Palatino, "Palatino Linotype", Georgia, serif;
+  --ui: Bahnschrift, "Segoe UI", sans-serif;
+  --mono: "Cascadia Mono", "Cascadia Code", Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bezel);
+  color: var(--ink);
+  font-family: var(--ui);
+  font-size: 15px;
+  line-height: 1.35;
+  overflow: hidden;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  z-index: 0;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(560px 280px at 100% 0, rgba(226, 90, 50, 0.42), transparent 62%);
+  opacity: 0;
+  transition: opacity 0.45s ease;
+}
+
+body.live::before { opacity: 1; }
+
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+::selection { background: #3d4c44; color: var(--ink); }
+::placeholder { color: #5d6c74; }
+
+h1, h2 { margin: 0; font-weight: 400; }
+h1 {
+  font-family: var(--display);
+  font-size: 28px;
+  letter-spacing: -0.02em;
+}
+
+h2 {
+  color: var(--dim);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: var(--hair); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+.rail-link { text-decoration: none; display: block; text-align: center; }
+
+
+#root { height: 100%; }
+
