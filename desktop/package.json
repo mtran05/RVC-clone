@@ -1,5 +1,5 @@
 {
-  "name": "rvc-realtime",
+  "name": "overtone",
   "version": "1.0.0",
   "private": true,
   "main": "main.js",
@@ -14,8 +14,8 @@
     "electron-builder": "^25.1.8"
   },
   "build": {
-    "appId": "local.rvc.realtime",
-    "productName": "RVC",
+    "appId": "local.overtone",
+    "productName": "Overtone",
     "asar": true,
     "npmRebuild": false,
     "directories": {
@@ -40,7 +40,7 @@
       "signAndEditExecutable": false
     },
     "portable": {
-      "artifactName": "RVC.exe"
+      "artifactName": "Overtone.exe"
     }
   }
 }

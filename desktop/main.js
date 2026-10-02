@@ -27,7 +27,7 @@ const python = process.env.RVC_PYTHON || (located && located.python);
 
 // Message shown in the window when the project or Python cannot be started.
 function missingPython() {
-  if (!root) return "Could not find this project. Keep RVC.exe inside the RVC Clone folder.";
+  if (!root) return "Could not find this project. Keep Overtone.exe inside the RVC Clone folder.";
   if (!python || !fs.existsSync(python)) return `Python not found: ${python || "(unset)"}`;
   return null;
 }
@@ -115,7 +115,7 @@ function createWindow() {
     minHeight: 680,
     backgroundColor: "#12181c",
     autoHideMenuBar: true,
-    title: "RVC",
+    title: "Overtone",
     icon: path.join(__dirname, "logo.png"),
     show: false,
     webPreferences: {

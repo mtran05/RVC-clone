@@ -1,8 +1,8 @@
-# RVC-clone
+# Overtone
 
-RVC clone with improvement (maybe)
+Real-time voice conversion client for RVC models. Speak into your mic and hear the converted voice live, from the command line or a desktop app.
 
-Inspired by [RVC WebUI](https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI)
+Based on [RVC WebUI](https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI).
 
 ## Setup
 
@@ -53,7 +53,7 @@ npm install
 npm run pack
 ```
 
-Run `desktop\dist\RVC.exe`. Leave that file in `desktop\dist`. It looks upward for this folder and runs `.venv\Scripts\python.exe`. Put `.pth` models in `assets\weights` and `.index` files in `assets\indices`, or browse to them.
+Run `desktop\dist\Overtone.exe`. Leave that file in `desktop\dist`. It looks upward for this folder and runs `.venv\Scripts\python.exe`. Put `.pth` models in `assets\weights` and `.index` files in `assets\indices`, or browse to them.
 
 To open the window without building the exe:
 
