@@ -5,9 +5,10 @@
   --rail: 76px;
   display: grid;
   grid-template-columns: var(--rail) minmax(0, 1fr) 312px;
-  /* Row 3 is sized by the tape panel itself (220px), so non-live pages are not
-     pushed down by an empty fixed-height row. */
-  grid-template-rows: auto minmax(0, 1fr);
+  /* Three explicit rows are needed: the rail and pages span with `1 / -1`,
+     which only covers explicit rows. Row 3 is `auto` so it collapses to 0 on
+     non-live pages and takes the tape's own height (220px) on the live page. */
+  grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
 .rail { grid-column: 1; grid-row: 1 / -1; }
