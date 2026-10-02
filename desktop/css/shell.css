@@ -37,7 +37,9 @@
   background: transparent;
   color: var(--dim);
   font-weight: 600;
+  line-height: 1.2;
   padding: 12px 4px;
+  overflow-wrap: anywhere;
 }
 
 .rail-link[aria-current="page"] {
