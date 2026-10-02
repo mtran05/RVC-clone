@@ -1,314 +1,496 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
+
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>RVC</title>
-  <link rel="stylesheet" href="styles.css">
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>RVC</title>
+	<link rel="stylesheet" href="styles.css" />
 </head>
+
 <body>
-  <div class="desk">
-    <nav class="rail" aria-label="Pages">
-      <button type="button" class="rail-link" aria-current="page">Live</button>
-    </nav>
-    <header class="mast">
-      <h1>RVC</h1>
-      <p id="status" aria-live="polite">Idle</p>
-    </header>
+	<div class="desk">
+		<nav class="rail" aria-label="Pages">
+			<button type="button" class="rail-link" aria-current="page">
+				Live
+			</button>
+		</nav>
+		<header class="mast">
+			<h1>RVC</h1>
+			<p id="status" aria-live="polite">
+				Idle
+			</p>
+		</header>
 
-      <section class="stage">
-        <div class="pitch-panel">
-          <div class="label-row">
-            <span class="panel-label">Pitch</span>
-            <button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-key" aria-label="About pitch">?</button>
-          </div>
-          <p class="tip" id="tip-key" hidden>Shift in semitones. Positive is higher. Negative is lower. Stops at two octaves.</p>
-          <div class="dial">
-            <div class="ticks" aria-hidden="true">
-              <span>−24</span><span>−12</span><span>0</span><span>+12</span><span>+24</span>
-            </div>
-            <input id="key-scale" type="range" min="-24" max="24" step="1" value="0" aria-label="Pitch scale" style="--pct: 50%">
-            <div class="readout">
-              <input id="key" type="number" min="-24" max="24" step="1" value="0" aria-label="Pitch in semitones">
-              <span class="unit">semitones</span>
-            </div>
-            <div class="nudge">
-              <button type="button" class="step" id="key-down" aria-label="Lower pitch">−</button>
-              <button type="button" class="step" id="key-up" aria-label="Raise pitch">+</button>
-            </div>
-          </div>
-        </div>
-        <fieldset>
-          <div class="label-row">
-            <legend>Pitch tracker</legend>
-            <button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-f0" aria-label="About pitch tracker">?</button>
-          </div>
-          <p class="tip" id="tip-f0" hidden>How pitch is measured. RMVPE is the default. FCPE is lighter. PM is the older method.</p>
-          <div class="choices">
-            <label><input type="radio" name="f0" value="rmvpe" checked> RMVPE</label>
-            <label><input type="radio" name="f0" value="fcpe"> FCPE</label>
-            <label><input type="radio" name="f0" value="pm"> PM</label>
-          </div>
-        </fieldset>
+		<section class="stage">
+			<div class="pitch-panel">
+				<div class="label-row">
+					<span class="panel-label">Pitch</span>
+					<button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-key"
+						aria-label="About pitch">
+						?
+					</button>
+				</div>
+				<p class="tip" id="tip-key" hidden>
+					Moves your voice up or down. A higher number sounds higher. A lower number sounds lower. It stops at
+					two octaves.
+				</p>
+				<div class="dial">
+					<div class="ticks" aria-hidden="true">
+						<span>−24</span><span>−12</span><span>0</span><span>+12</span><span>+24</span>
+					</div>
+					<input id="key-scale" type="range" min="-24" max="24" step="1" value="0" aria-label="Pitch scale"
+						style="--pct: 50%" />
+					<div class="readout">
+						<div class="nudge">
+							<button type="button" class="step" id="key-down" aria-label="Lower pitch">
+								−
+							</button>
+							<input id="key" type="number" min="-24" max="24" step="1" value="0"
+								aria-label="Pitch in semitones" />
+							<button type="button" class="step" id="key-up" aria-label="Raise pitch">
+								+
+							</button>
+						</div>
+						<span class="unit">semitones</span>
+					</div>
+				</div>
+			</div>
+			<fieldset>
+				<div class="label-row">
+					<legend>Pitch tracker</legend>
+					<button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-f0"
+						aria-label="About pitch tracker">
+						?
+					</button>
+				</div>
+				<p class="tip" id="tip-f0" hidden>
+					How the app hears the note you are singing. RMVPE is the usual choice. FCPE uses less of the
+					computer. PM is the older method.
+				</p>
+				<div class="choices">
+					<label><input type="radio" name="f0" value="rmvpe" checked />
+						RMVPE</label>
+					<label><input type="radio" name="f0" value="fcpe" />
+						FCPE</label>
+					<label><input type="radio" name="f0" value="pm" />
+						PM</label>
+				</div>
+			</fieldset>
 
-        <div class="pair">
-          <section>
-            <div class="label-row">
-              <label for="formant">Formant</label>
-              <button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-formant" aria-label="About formant">?</button>
-              <output id="formant-out" for="formant">0.0</output>
-            </div>
-            <p class="tip" id="tip-formant" hidden>Shifts the tone brighter or darker without the same pitch change. 0 leaves it alone.</p>
-            <input id="formant" class="control" type="number" step="0.1" value="0">
-          </section>
-          <section>
-            <div class="label-row">
-              <label for="rms-mix-rate">Loudness mix</label>
-              <button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-rms" aria-label="About loudness mix">?</button>
-              <output id="rms-mix-rate-out" for="rms-mix-rate">0.00</output>
-            </div>
-            <p class="tip" id="tip-rms" hidden>0 follows your volume. 1 keeps the model's loudness.</p>
-            <input id="rms-mix-rate" type="range" min="0" max="1" step="0.01" value="0" style="--pct: 0%">
-          </section>
-        </div>
-      </section>
+			<div class="pair">
+				<section>
+					<div class="label-row">
+						<label for="formant">Formant</label>
+						<button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-formant"
+							aria-label="About formant">
+							?
+						</button>
+					</div>
+					<p class="tip" id="tip-formant" hidden>
+						Makes the voice brighter or darker without moving the note as much. 0 leaves the tone alone.
+					</p>
+					<input id="formant" class="control" type="number" step="0.1" value="0" />
+				</section>
+				<section>
+					<div class="label-row">
+						<label for="rms-mix-rate">Loudness mix</label>
+						<button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-rms"
+							aria-label="About loudness mix">
+							?
+						</button>
+						<output id="rms-mix-rate-out" for="rms-mix-rate">0.00</output>
+					</div>
+					<p class="tip" id="tip-rms" hidden>
+						0 follows how loud you are. 1 keeps the loudness of the chosen voice.
+					</p>
+					<input id="rms-mix-rate" type="range" min="0" max="1" step="0.01" value="0" style="--pct: 0%" />
+				</section>
+			</div>
+		</section>
 
+		<aside class="rack">
+			<div class="rack-body">
+				<p class="group">Voice</p>
+				<div class="field">
+					<div class="label-row">
+						<label for="model">Model</label>
+						<button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-model"
+							aria-label="About model">
+							?
+						</button>
+					</div>
+					<p class="tip" id="tip-model" hidden>
+						The voice you want to sound like. Pick one before you go live.
+					</p>
+					<div class="row">
+						<select id="model" class="control"></select>
+						<button type="button" class="ghost" id="browse-model">
+							Browse
+						</button>
+					</div>
+				</div>
+				<div class="field">
+					<div class="label-row">
+						<label for="index">Index</label>
+						<button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-index"
+							aria-label="About index">
+							?
+						</button>
+					</div>
+					<p class="tip" id="tip-index" hidden>
+						An optional file that pulls the result closer to that voice. None turns this off.
+					</p>
+					<div class="row">
+						<select id="index" class="control"></select>
+						<button type="button" class="ghost" id="browse-index">
+							Browse
+						</button>
+					</div>
+				</div>
+				<div class="field">
+					<div class="label-row">
+						<label for="index-rate">Index rate</label>
+						<button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-index-rate"
+							aria-label="About index rate">
+							?
+						</button>
+						<output id="index-rate-out" for="index-rate">0.75</output>
+					</div>
+					<p class="tip" id="tip-index-rate" hidden>
+						How much the index file is used. 0 uses only the voice. 1 leans on the index as much as it can.
+					</p>
+					<input id="index-rate" type="range" min="0" max="1" step="0.01" value="0.75" style="--pct: 75%" />
+				</div>
+				<p class="group">Audio</p>
+				<div class="field">
+					<div class="label-row">
+						<label for="input-device">Microphone</label>
+						<button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-input-device"
+							aria-label="About microphone">
+							?
+						</button>
+					</div>
+					<p class="tip" id="tip-input-device" hidden>
+						The microphone you speak into. System default follows the one Windows is using.
+					</p>
+					<select id="input-device" class="control"></select>
+				</div>
+				<div class="field">
+					<div class="label-row">
+						<label for="output-device">Speakers</label>
+						<button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-output-device"
+							aria-label="About speakers">
+							?
+						</button>
+					</div>
+					<p class="tip" id="tip-output-device" hidden>
+						Where the converted voice plays. System default uses your usual speakers.
+					</p>
+					<select id="output-device" class="control"></select>
+				</div>
+				<p class="device-count" id="device-count"></p>
+				<p class="device-error" id="device-error" hidden></p>
+				<button type="button" class="text" id="refresh">
+					Refresh devices
+				</button>
+			</div>
+			<button type="button" class="more-toggle" id="more-toggle" aria-expanded="false" aria-controls="more">
+				More settings
+			</button>
+			<button type="button" class="start" id="start">
+				Go live
+			</button>
+		</aside>
 
-      <aside class="rack">
-        <div class="rack-body">
-        <p class="group">Voice</p>
-        <div class="field">
-          <div class="label-row">
-            <label for="model">Model</label>
-            <button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-model" aria-label="About model">?</button>
-          </div>
-          <p class="tip" id="tip-model" hidden>Trained voice file (.pth). Go live needs one.</p>
-          <div class="row">
-            <select id="model" class="control"></select>
-            <button type="button" class="ghost" id="browse-model">Browse</button>
-          </div>
-        </div>
-        <div class="field">
-          <div class="label-row">
-            <label for="index">Index</label>
-            <button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-index" aria-label="About index">?</button>
-          </div>
-          <p class="tip" id="tip-index" hidden>Optional retrieval file. It pulls the result toward that voice. None leaves it off.</p>
-          <div class="row">
-            <select id="index" class="control"></select>
-            <button type="button" class="ghost" id="browse-index">Browse</button>
-          </div>
-        </div>
-        <div class="field">
-          <div class="label-row">
-            <label for="index-rate">Index rate</label>
-            <button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-index-rate" aria-label="About index rate">?</button>
-            <output id="index-rate-out" for="index-rate">0.75</output>
-          </div>
-          <p class="tip" id="tip-index-rate" hidden>0 uses the model alone. 1 blends the index in fully.</p>
-          <input id="index-rate" type="range" min="0" max="1" step="0.01" value="0.75" style="--pct: 75%">
-        </div>
-        <p class="group">Audio</p>
-        <div class="field">
-          <div class="label-row">
-            <label for="input-device">Microphone</label>
-            <button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-input-device" aria-label="About microphone">?</button>
-          </div>
-          <p class="tip" id="tip-input-device" hidden>Capture device. System default follows Windows. WASAPI is the usual choice for live use.</p>
-          <select id="input-device" class="control"></select>
-        </div>
-        <div class="field">
-          <div class="label-row">
-            <label for="output-device">Speakers</label>
-            <button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-output-device" aria-label="About speakers">?</button>
-          </div>
-          <p class="tip" id="tip-output-device" hidden>Playback device. System default follows Windows. Pick the same host type as the microphone when you can.</p>
-          <select id="output-device" class="control"></select>
-        </div>
-        <p class="device-count" id="device-count"></p>
-        <p class="device-error" id="device-error" hidden></p>
-        <button type="button" class="text" id="refresh">Refresh devices</button>
-        </div>
-        <button type="button" class="more-toggle" id="more-toggle" aria-expanded="false" aria-controls="more">More settings</button>
-        <button type="button" class="start" id="start">Go live</button>
-      </aside>
-
-      <section class="tape" aria-label="Converter">
-        <h2>Converter</h2>
-        <p class="log-empty" id="log-empty">Go live to see the converter.</p>
-        <pre id="log" aria-live="polite"></pre>
-      </section>
-  </div>
-  <div class="overlay" id="more" hidden>
-    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="more-title">
-      <div class="sheet-bar">
-        <h2 id="more-title">More settings</h2>
-        <button type="button" class="text" id="more-close">Close</button>
-      </div>
-<div class="more">
-        <section>
-          <h3 class="group">Timing</h3>
-          <div class="bunch">
-            <div class="field">
-              <div class="label-row">
-                <label for="block-time">Block (seconds)</label>
-                <button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-block" aria-label="About block">?</button>
-              </div>
-              <p class="tip" id="tip-block" hidden>How much audio is converted at once. Lower delay uses more CPU.</p>
-              <input id="block-time" class="control" type="number" min="0.01" step="0.01" value="0.25">
-            </div>
-            <div class="field">
-              <div class="label-row">
-                <label for="crossfade-time">Crossfade (seconds)</label>
-                <button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-crossfade" aria-label="About crossfade">?</button>
-              </div>
-              <p class="tip" id="tip-crossfade" hidden>Overlap between blocks so the joins stay smooth.</p>
-              <input id="crossfade-time" class="control" type="number" min="0" step="0.01" value="0.05">
-            </div>
-            <div class="field">
-              <div class="label-row">
-                <label for="extra-time">Context (seconds)</label>
-                <button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-extra" aria-label="About context">?</button>
-              </div>
-              <p class="tip" id="tip-extra" hidden>Audio kept before each block so the model hears more of the phrase.</p>
-              <input id="extra-time" class="control" type="number" min="0" step="0.1" value="2.5">
-            </div>
-          </div>
-        </section>
-        <section>
-          <h3 class="group">Pitch</h3>
-          <div class="bunch">
-            <div class="field">
-              <div class="label-row">
-                <label for="f0-min">Lowest pitch (Hz)</label>
-                <button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-f0-min" aria-label="About lowest pitch">?</button>
-              </div>
-              <p class="tip" id="tip-f0-min" hidden>Lowest frequency treated as a voice. Sound below this is ignored as pitch.</p>
-              <input id="f0-min" class="control" type="number" min="1" step="1" value="50">
-            </div>
-            <div class="field">
-              <div class="label-row">
-                <label for="f0-max">Highest pitch (Hz)</label>
-                <button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-f0-max" aria-label="About highest pitch">?</button>
-              </div>
-              <p class="tip" id="tip-f0-max" hidden>Highest frequency treated as a voice. Must stay above the lowest pitch.</p>
-              <input id="f0-max" class="control" type="number" min="1" step="1" value="1100">
-            </div>
-            <div class="field">
-              <div class="label-row">
-                <label for="rmvpe-threshold">RMVPE threshold</label>
-                <button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-rmvpe" aria-label="About RMVPE threshold">?</button>
-              </div>
-              <p class="tip" id="tip-rmvpe" hidden>How sure RMVPE must be before it counts a note. Higher ignores more noise.</p>
-              <input id="rmvpe-threshold" class="control" type="number" step="0.001" value="0.03">
-            </div>
-            <div class="field">
-              <div class="label-row">
-                <label for="fcpe-threshold">FCPE threshold</label>
-                <button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-fcpe" aria-label="About FCPE threshold">?</button>
-              </div>
-              <p class="tip" id="tip-fcpe" hidden>How sure FCPE must be before it counts a note.</p>
-              <input id="fcpe-threshold" class="control" type="number" step="0.001" value="0.006">
-            </div>
-          </div>
-        </section>
-        <section>
-          <h3 class="group">Index</h3>
-          <div class="bunch">
-            <div class="field">
-              <div class="label-row">
-                <label for="index-neighbors">Index neighbors</label>
-                <button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-neighbors" aria-label="About index neighbors">?</button>
-              </div>
-              <p class="tip" id="tip-neighbors" hidden>How many index matches are blended. At least 1.</p>
-              <input id="index-neighbors" class="control" type="number" min="1" step="1" value="8">
-            </div>
-          </div>
-        </section>
-        <section>
-          <h3 class="group">Gain</h3>
-          <div class="bunch">
-            <div class="field">
-              <div class="label-row">
-                <label for="input-gain">Mic gain</label>
-                <button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-in-gain" aria-label="About mic gain">?</button>
-              </div>
-              <p class="tip" id="tip-in-gain" hidden>Multiplies the microphone before conversion. 1 leaves it unchanged.</p>
-              <input id="input-gain" class="control" type="number" step="0.1" value="1">
-            </div>
-            <div class="field">
-              <div class="label-row">
-                <label for="output-gain">Speaker gain</label>
-                <button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-out-gain" aria-label="About speaker gain">?</button>
-              </div>
-              <p class="tip" id="tip-out-gain" hidden>Multiplies the converted audio. 1 leaves it unchanged.</p>
-              <input id="output-gain" class="control" type="number" step="0.1" value="1">
-            </div>
-            <div class="checks">
-              <label class="check"><input type="checkbox" id="no-clip"> Don't clip</label>
-              <button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-clip" aria-label="About clipping">?</button>
-              <p class="tip" id="tip-clip" hidden>Leave samples outside -1 to 1 instead of cutting them off.</p>
-            </div>
-          </div>
-        </section>
-        <section>
-          <h3 class="group">Device</h3>
-          <div class="bunch">
-            <div class="field">
-              <div class="label-row">
-                <label for="sample-rate">Sample rate</label>
-                <button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-rate" aria-label="About sample rate">?</button>
-              </div>
-              <p class="tip" id="tip-rate" hidden>0 uses the model's sample rate. The live stream opens at this rate.</p>
-              <input id="sample-rate" class="control" type="number" min="0" step="1" value="0">
-            </div>
-            <div class="field">
-              <div class="label-row">
-                <label for="input-channels">Mic channels</label>
-                <button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-in-ch" aria-label="About mic channels">?</button>
-              </div>
-              <p class="tip" id="tip-in-ch" hidden>Channels opened on the microphone, then mixed to mono.</p>
-              <input id="input-channels" class="control" type="number" min="1" step="1" value="1">
-            </div>
-            <div class="field">
-              <div class="label-row">
-                <label for="output-channels">Speaker channels</label>
-                <button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-out-ch" aria-label="About speaker channels">?</button>
-              </div>
-              <p class="tip" id="tip-out-ch" hidden>Channels played back. Mono audio is copied onto each.</p>
-              <input id="output-channels" class="control" type="number" min="1" step="1" value="2">
-            </div>
-            <div class="field">
-              <div class="label-row">
-                <label for="latency">Latency</label>
-                <button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-latency" aria-label="About latency">?</button>
-              </div>
-              <p class="tip" id="tip-latency" hidden>PortAudio buffer. low, high, or seconds. Empty lets PortAudio choose. This is separate from block time.</p>
-              <input id="latency" class="control" type="text" placeholder="low, high, or seconds" spellcheck="false" autocomplete="off">
-            </div>
-            <div class="field">
-              <div class="label-row">
-                <label for="host-api">Host API</label>
-                <button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-host" aria-label="About host API">?</button>
-              </div>
-              <p class="tip" id="tip-host" hidden>Only use devices on this host, such as WASAPI. Empty allows every host.</p>
-              <input id="host-api" class="control" type="text" placeholder="WASAPI" spellcheck="false" autocomplete="off">
-            </div>
-            <div class="checks">
-              <label class="check"><input type="checkbox" id="wasapi-exclusive"> WASAPI exclusive</label>
-              <button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-exclusive" aria-label="About WASAPI exclusive">?</button>
-              <p class="tip" id="tip-exclusive" hidden>Open WASAPI devices in exclusive mode. Both devices must be WASAPI.</p>
-              <label class="check"><input type="checkbox" id="wasapi-auto-convert"> WASAPI resample</label>
-              <button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-resample" aria-label="About WASAPI resample">?</button>
-              <p class="tip" id="tip-resample" hidden>Let WASAPI resample when the device rate differs. Both devices must be WASAPI.</p>
-            </div>
-          </div>
-        </section>
-      </div>
-
-    </div>
-  </div>
-  <div id="tip-pop" class="tip-pop" role="tooltip" hidden></div>
-  <script src="renderer.js"></script>
+		<section class="tape" aria-label="Logs">
+			<h2>Logs</h2>
+			<p class="log-empty" id="log-empty">
+				Logs are displayed here.
+			</p>
+			<pre id="log" aria-live="polite"></pre>
+		</section>
+	</div>
+	<div class="overlay" id="more" hidden>
+		<div class="sheet" role="dialog" aria-modal="true" aria-labelledby="more-title">
+			<div class="sheet-bar">
+				<h2 id="more-title">More settings</h2>
+				<button type="button" class="text" id="more-close">
+					Close
+				</button>
+			</div>
+			<div class="more">
+				<section>
+					<h3 class="group">Timing</h3>
+					<div class="bunch">
+						<div class="field">
+							<div class="label-row">
+								<label for="block-time">Block (seconds)</label>
+								<button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-block"
+									aria-label="About block">
+									?
+								</button>
+							</div>
+							<p class="tip" id="tip-block" hidden>
+								How much of your voice is converted at once. A smaller number answers faster and works
+								the computer harder.
+							</p>
+							<input id="block-time" class="control" type="number" min="0.01" step="0.01" value="0.25" />
+						</div>
+						<div class="field">
+							<div class="label-row">
+								<label for="crossfade-time">Crossfade (seconds)</label>
+								<button type="button" class="tip-btn" aria-expanded="false"
+									aria-controls="tip-crossfade" aria-label="About crossfade">
+									?
+								</button>
+							</div>
+							<p class="tip" id="tip-crossfade" hidden>
+								A short blend between each piece of audio so you do not hear clicks.
+							</p>
+							<input id="crossfade-time" class="control" type="number" min="0" step="0.01" value="0.05" />
+						</div>
+						<div class="field">
+							<div class="label-row">
+								<label for="extra-time">Context (seconds)</label>
+								<button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-extra"
+									aria-label="About context">
+									?
+								</button>
+							</div>
+							<p class="tip" id="tip-extra" hidden>
+								How much of what you just said is kept in mind. More of it can sound steadier.
+							</p>
+							<input id="extra-time" class="control" type="number" min="0" step="0.1" value="2.5" />
+						</div>
+					</div>
+				</section>
+				<section>
+					<h3 class="group">Pitch</h3>
+					<div class="bunch">
+						<div class="field">
+							<div class="label-row">
+								<label for="f0-min">Lowest pitch (Hz)</label>
+								<button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-f0-min"
+									aria-label="About lowest pitch">
+									?
+								</button>
+							</div>
+							<p class="tip" id="tip-f0-min" hidden>
+								The lowest tone counted as a voice. Anything lower is ignored.
+							</p>
+							<input id="f0-min" class="control" type="number" min="1" step="1" value="50" />
+						</div>
+						<div class="field">
+							<div class="label-row">
+								<label for="f0-max">Highest pitch (Hz)</label>
+								<button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-f0-max"
+									aria-label="About highest pitch">
+									?
+								</button>
+							</div>
+							<p class="tip" id="tip-f0-max" hidden>
+								The highest tone counted as a voice. Keep it above the lowest pitch.
+							</p>
+							<input id="f0-max" class="control" type="number" min="1" step="1" value="1100" />
+						</div>
+						<div class="field">
+							<div class="label-row">
+								<label for="rmvpe-threshold">RMVPE threshold</label>
+								<button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-rmvpe"
+									aria-label="About RMVPE threshold">
+									?
+								</button>
+							</div>
+							<p class="tip" id="tip-rmvpe" hidden>
+								How sure the usual pitch method must be before it counts a note. A higher number ignores
+								more noise.
+							</p>
+							<input id="rmvpe-threshold" class="control" type="number" min="0" step="0.001"
+								value="0.03" />
+						</div>
+						<div class="field">
+							<div class="label-row">
+								<label for="fcpe-threshold">FCPE threshold</label>
+								<button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-fcpe"
+									aria-label="About FCPE threshold">
+									?
+								</button>
+							</div>
+							<p class="tip" id="tip-fcpe" hidden>
+								How sure the lighter pitch method must be before it counts a note. A higher number
+								ignores more noise.
+							</p>
+							<input id="fcpe-threshold" class="control" type="number" min="0" step="0.001"
+								value="0.006" />
+						</div>
+					</div>
+				</section>
+				<section>
+					<h3 class="group">Index</h3>
+					<div class="bunch">
+						<div class="field">
+							<div class="label-row">
+								<label for="index-neighbors">Index neighbors</label>
+								<button type="button" class="tip-btn" aria-expanded="false"
+									aria-controls="tip-neighbors" aria-label="About index neighbors">
+									?
+								</button>
+							</div>
+							<p class="tip" id="tip-neighbors" hidden>
+								How many close matches from the index file are mixed together. Use a whole number, at
+								least 1.
+							</p>
+							<input id="index-neighbors" class="control" type="number" min="1" step="1" value="8" />
+						</div>
+					</div>
+				</section>
+				<section>
+					<h3 class="group">Gain</h3>
+					<div class="bunch">
+						<div class="field">
+							<div class="label-row">
+								<label for="input-gain">Mic gain</label>
+								<button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-in-gain"
+									aria-label="About mic gain">
+									?
+								</button>
+							</div>
+							<p class="tip" id="tip-in-gain" hidden>
+								Turns the microphone up or down before conversion. 1 leaves it as it is.
+							</p>
+							<input id="input-gain" class="control" type="number" min="0" step="0.1" value="1" />
+						</div>
+						<div class="field">
+							<div class="label-row">
+								<label for="output-gain">Speaker gain</label>
+								<button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-out-gain"
+									aria-label="About speaker gain">
+									?
+								</button>
+							</div>
+							<p class="tip" id="tip-out-gain" hidden>
+								Turns the converted voice up or down. 1 leaves it as it is.
+							</p>
+							<input id="output-gain" class="control" type="number" min="0" step="0.1" value="1" />
+						</div>
+						<div class="checks">
+							<label class="check"><input type="checkbox" id="no-clip" />
+								Don't clip</label>
+							<button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-clip"
+								aria-label="About clipping">
+								?
+							</button>
+							<p class="tip" id="tip-clip" hidden>
+								Off keeps loud peaks inside a safe range. On leaves those peaks alone.
+							</p>
+						</div>
+					</div>
+				</section>
+				<section>
+					<h3 class="group">Device</h3>
+					<div class="bunch">
+						<div class="field">
+							<div class="label-row">
+								<label for="sample-rate">Sample rate</label>
+								<button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-rate"
+									aria-label="About sample rate">
+									?
+								</button>
+							</div>
+							<p class="tip" id="tip-rate" hidden>
+								How many samples play each second. 0 uses the voice model's own rate. Use a whole
+								number.
+							</p>
+							<input id="sample-rate" class="control" type="number" min="0" step="1" value="0" />
+						</div>
+						<div class="field">
+							<div class="label-row">
+								<label for="input-channels">Mic channels</label>
+								<button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-in-ch"
+									aria-label="About mic channels">
+									?
+								</button>
+							</div>
+							<p class="tip" id="tip-in-ch" hidden>
+								How many microphone channels to open. They are mixed into one voice. Use a whole number,
+								at least 1.
+							</p>
+							<input id="input-channels" class="control" type="number" min="1" step="1" value="1" />
+						</div>
+						<div class="field">
+							<div class="label-row">
+								<label for="output-channels">Speaker channels</label>
+								<button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-out-ch"
+									aria-label="About speaker channels">
+									?
+								</button>
+							</div>
+							<p class="tip" id="tip-out-ch" hidden>
+								How many speaker channels to play. The voice is copied onto each one. Use a whole
+								number, at least 1.
+							</p>
+							<input id="output-channels" class="control" type="number" min="1" step="1" value="2" />
+						</div>
+						<div class="field">
+							<div class="label-row">
+								<label for="latency">Latency</label>
+								<button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-latency"
+									aria-label="About latency">
+									?
+								</button>
+							</div>
+							<p class="tip" id="tip-latency" hidden>
+								How long the sound card waits. Type low, high, or a number of seconds. Leave it empty to
+								let the computer choose. This is separate from block time.
+							</p>
+							<input id="latency" class="control" type="text" placeholder="low, high, or seconds"
+								spellcheck="false" autocomplete="off" />
+						</div>
+						<div class="field">
+							<div class="label-row">
+								<label for="host-api">Host API</label>
+								<button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-host"
+									aria-label="About host API">
+									?
+								</button>
+							</div>
+							<p class="tip" id="tip-host" hidden>
+								Show devices from only one sound system, such as WASAPI. Leave it empty to allow every
+								system.
+							</p>
+							<input id="host-api" class="control" type="text" placeholder="WASAPI" spellcheck="false"
+								autocomplete="off" />
+						</div>
+						<div class="checks">
+							<label class="check"><input type="checkbox" id="wasapi-exclusive" />
+								WASAPI exclusive</label>
+							<button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-exclusive"
+								aria-label="About WASAPI exclusive">
+								?
+							</button>
+							<p class="tip" id="tip-exclusive" hidden>
+								Takes over the WASAPI microphone and speakers so other apps cannot share them. Both
+								devices must be WASAPI.
+							</p>
+							<label class="check"><input type="checkbox" id="wasapi-auto-convert" />
+								WASAPI resample</label>
+							<button type="button" class="tip-btn" aria-expanded="false" aria-controls="tip-resample"
+								aria-label="About WASAPI resample">
+								?
+							</button>
+							<p class="tip" id="tip-resample" hidden>
+								Lets WASAPI change the rate when a device does not match. Both the microphone and
+								speakers must be WASAPI.
+							</p>
+						</div>
+					</div>
+				</section>
+			</div>
+		</div>
+	</div>
+	<div id="tip-pop" class="tip-pop" role="tooltip" hidden></div>
+	<script src="renderer.js"></script>
 </body>
+
 </html>

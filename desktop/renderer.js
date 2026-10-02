@@ -117,7 +117,7 @@ function bindRange(id) {
 // ponytail: ±24 st is two octaves. Raise min/max if a model needs more.
 function setKey(value) {
   if (!Number.isFinite(value)) value = 0;
-  const next = Math.max(-24, Math.min(24, value));
+  const next = Math.max(-24, Math.min(24, Math.round(value)));
   keyInput.value = String(next);
   keyInput.classList.toggle("shifted", next !== 0);
   const scale = document.getElementById("key-scale");
@@ -127,7 +127,54 @@ function setKey(value) {
   scale.style.setProperty("--pct", `${((next + 24) / 48) * 100}%`);
 }
 
+function legalNumber(input) {
+  const step = Number(input.step);
+  const places = (String(input.step).split(".")[1] || "").length;
+  let value = Number(input.value);
+  if (!Number.isFinite(value)) value = Number(input.defaultValue) || 0;
+  if (Number.isFinite(step) && step > 0) value = Math.round(value / step) * step;
+  if (input.min !== "") value = Math.max(Number(input.min), value);
+  if (input.max !== "") value = Math.min(Number(input.max), value);
+  input.value = places ? String(Number(value.toFixed(places))) : String(Math.round(value));
+}
+
+function legalPitchRange(edited) {
+  const minEl = document.getElementById("f0-min");
+  const maxEl = document.getElementById("f0-max");
+  legalNumber(minEl);
+  legalNumber(maxEl);
+  const min = Number(minEl.value);
+  const max = Number(maxEl.value);
+  if (max > min) return;
+  if (edited === maxEl) {
+    const nextMin = Math.max(1, max - 1);
+    minEl.value = String(nextMin);
+    if (Number(maxEl.value) <= nextMin) maxEl.value = String(nextMin + 1);
+    return;
+  }
+  maxEl.value = String(min + 1);
+}
+
+function legalLatency(input) {
+  const value = input.value.trim().toLowerCase();
+  if (!value || value === "low" || value === "high" || Number.isFinite(Number(value))) {
+    input.value = value;
+    return;
+  }
+  input.value = "";
+}
+
+function legalFields() {
+  for (const input of document.querySelectorAll('input[type="number"]')) {
+    if (input.id === "key") continue;
+    legalNumber(input);
+  }
+  legalPitchRange();
+  legalLatency(document.getElementById("latency"));
+}
+
 function readOpts() {
+  legalFields();
   const value = (id) => document.getElementById(id).value;
   const num = (id) => Number(value(id));
   return {
@@ -204,22 +251,60 @@ more.addEventListener("click", (event) => {
   if (event.target === more) setMore(false);
 });
 
-document.getElementById("key-down").addEventListener("click", () => setKey(Number(keyInput.value) - 1));
-document.getElementById("key-up").addEventListener("click", () => setKey(Number(keyInput.value) + 1));
+for (const input of document.querySelectorAll('input[type="number"]')) {
+  if (input.closest(".nudge")) continue;
+  const nudge = document.createElement("div");
+  nudge.className = "nudge";
+  const name = (document.querySelector(`label[for="${input.id}"]`) || {}).textContent || "value";
+  const down = document.createElement("button");
+  down.type = "button";
+  down.className = "step";
+  down.textContent = "−";
+  down.setAttribute("aria-label", `Decrease ${name}`);
+  const up = document.createElement("button");
+  up.type = "button";
+  up.className = "step";
+  up.textContent = "+";
+  up.setAttribute("aria-label", `Increase ${name}`);
+  input.before(nudge);
+  nudge.append(down, input, up);
+}
+
+document.body.addEventListener("click", (event) => {
+  const button = event.target.closest(".nudge .step");
+  if (!button) return;
+  const input = button.parentElement.querySelector("input");
+  if (!input) return;
+  const step = Number(input.step) || 1;
+  const dir = button.nextElementSibling === input ? -1 : 1;
+  let value = Number(input.value);
+  if (!Number.isFinite(value)) value = 0;
+  value += dir * step;
+  if (input.min !== "") value = Math.max(Number(input.min), value);
+  if (input.max !== "") value = Math.min(Number(input.max), value);
+  if (input.id === "key") {
+    setKey(value);
+    return;
+  }
+  input.value = String(value);
+  input.dispatchEvent(new Event("change"));
+});
+
 keyInput.addEventListener("input", () => setKey(Number(keyInput.value)));
 document.getElementById("key-scale").addEventListener("input", (event) => setKey(Number(event.target.value)));
 setKey(Number(keyInput.value));
 
+for (const input of document.querySelectorAll('input[type="number"]')) {
+  if (input.id === "key") continue;
+  input.addEventListener("change", () => {
+    if (input.id === "f0-min" || input.id === "f0-max") legalPitchRange(input);
+    else legalNumber(input);
+  });
+}
+document.getElementById("latency").addEventListener("change", () => legalLatency(document.getElementById("latency")));
+
 bindRange("index-rate");
 bindRange("rms-mix-rate");
-
-const formantInput = document.getElementById("formant");
-const formantOut = document.getElementById("formant-out");
-const paintFormant = () => {
-  formantOut.textContent = Number(formantInput.value).toFixed(1);
-};
-formantInput.addEventListener("input", paintFormant);
-paintFormant();
 
 document.getElementById("browse-model").addEventListener("click", async () => {
   if (!window.rvc) return;
@@ -266,25 +351,9 @@ function placeTip() {
   tipPop.style.top = `${top}px`;
 }
 
-function closePitchTip() {
-  const button = document.querySelector(".pitch-panel .tip-btn");
-  const source = document.getElementById("tip-key");
-  if (button) button.setAttribute("aria-expanded", "false");
-  if (source) source.hidden = true;
-}
-
 document.body.addEventListener("click", (event) => {
   const button = event.target.closest(".tip-btn");
-  if (button && button.closest(".pitch-panel")) {
-    closeTip();
-    const source = document.getElementById(button.getAttribute("aria-controls"));
-    const open = button.getAttribute("aria-expanded") === "true";
-    button.setAttribute("aria-expanded", open ? "false" : "true");
-    if (source) source.hidden = open;
-    return;
-  }
   if (button) {
-    closePitchTip();
     if (tipBtn === button) {
       closeTip();
       return;
@@ -304,7 +373,6 @@ document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape") return;
   if (!more.hidden) setMore(false);
   closeTip();
-  closePitchTip();
 });
 
 window.addEventListener("resize", () => {
