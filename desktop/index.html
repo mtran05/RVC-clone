@@ -10,14 +10,14 @@
 </head>
 
 <body>
-	<div class="desk">
+	<div class="desk" data-page="live">
 		<nav class="rail" aria-label="Pages">
 			<p class="brand"><img src="logo.svg" width="36" height="36" alt="Overtone"></p>
-			<button type="button" class="rail-link" aria-current="page">
+			<button type="button" class="rail-link" data-page="live" aria-current="page">
 				Live
 			</button>
-			<button type="button" class="rail-link">Saved</button>
-			<button type="button" class="rail-link">SFX</button>
+			<button type="button" class="rail-link" data-page="saved">Saved</button>
+			<button type="button" class="rail-link" data-page="sfx">SFX</button>
 		</nav>
 		<header class="mast">
 			<h1>Overtone</h1>
@@ -216,6 +216,16 @@
 				Logs are displayed here.
 			</p>
 			<pre id="log" aria-live="polite"></pre>
+		</section>
+
+		<section class="page" id="page-saved" aria-label="Saved" hidden>
+			<h2>Saved</h2>
+			<p>Coming soon.</p>
+		</section>
+
+		<section class="page" id="page-sfx" aria-label="SFX" hidden>
+			<h2>SFX</h2>
+			<p>Coming soon.</p>
 		</section>
 	</div>
 	<div class="overlay" id="more" hidden>

@@ -271,6 +271,21 @@ async function refreshDevices() {
   if (!running) setStatus("Idle");
 }
 
+const desk = document.querySelector(".desk");
+const railLinks = document.querySelectorAll(".rail-link");
+
+// Show one page. Live keeps running in the background while another page is open.
+function showPage(name) {
+  desk.dataset.page = name;
+  for (const link of railLinks) {
+    if (link.dataset.page === name) link.setAttribute("aria-current", "page");
+    else link.removeAttribute("aria-current");
+  }
+  for (const page of document.querySelectorAll(".page")) page.hidden = page.id !== `page-${name}`;
+}
+
+for (const link of railLinks) link.addEventListener("click", () => showPage(link.dataset.page));
+
 const more = document.getElementById("more");
 const moreToggle = document.getElementById("more-toggle");
 

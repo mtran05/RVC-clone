@@ -13,6 +13,21 @@
 .stage { grid-column: 2; grid-row: 2; }
 .rack { grid-column: 3; grid-row: 2; }
 .tape { grid-column: 2 / -1; grid-row: 3; }
+.page { grid-column: 2 / -1; grid-row: 2 / -1; }
+
+.desk:not([data-page="live"]) :is(.stage, .rack, .tape) { display: none; }
+
+.page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 36px;
+  color: var(--dim);
+}
+
+.page[hidden] { display: none; }
 
 .rail {
   display: flex;

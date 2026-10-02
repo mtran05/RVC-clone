@@ -19,7 +19,8 @@
   .brand { margin: 0 10px 0 6px; }
   .rail-link { width: auto; padding: 12px 14px; }
   .rail-link[aria-current="page"] { box-shadow: inset 0 -2px 0 var(--filament); }
-  .mast, .stage, .rack, .tape { grid-column: 1; grid-row: auto; }
+  .mast, .stage, .rack, .tape, .page { grid-column: 1; grid-row: auto; }
+  .page { min-height: 50vh; }
   .mast, .stage { padding-left: 16px; padding-right: 16px; }
   .stage { overflow: visible; min-height: 0; }
   .rack { border-left: 0; border-top: 1px solid var(--hair); }
