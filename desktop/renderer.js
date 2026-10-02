@@ -187,6 +187,23 @@ async function refreshDevices() {
   if (!running) setStatus("Idle");
 }
 
+const more = document.getElementById("more");
+const moreToggle = document.getElementById("more-toggle");
+
+function setMore(open) {
+  if (more.hidden === !open) return;
+  more.hidden = !open;
+  moreToggle.setAttribute("aria-expanded", String(open));
+  if (open) document.getElementById("more-close").focus();
+  else moreToggle.focus();
+}
+
+moreToggle.addEventListener("click", () => setMore(more.hidden));
+document.getElementById("more-close").addEventListener("click", () => setMore(false));
+more.addEventListener("click", (event) => {
+  if (event.target === more) setMore(false);
+});
+
 document.getElementById("key-down").addEventListener("click", () => setKey(Number(keyInput.value) - 1));
 document.getElementById("key-up").addEventListener("click", () => setKey(Number(keyInput.value) + 1));
 keyInput.addEventListener("input", () => setKey(Number(keyInput.value)));
@@ -285,6 +302,7 @@ document.body.addEventListener("click", (event) => {
 
 document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape") return;
+  if (!more.hidden) setMore(false);
   closeTip();
   closePitchTip();
 });

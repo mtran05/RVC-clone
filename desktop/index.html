@@ -8,12 +8,14 @@
 </head>
 <body>
   <div class="desk">
+    <nav class="rail" aria-label="Pages">
+      <button type="button" class="rail-link" aria-current="page">Live</button>
+    </nav>
     <header class="mast">
       <h1>RVC</h1>
       <p id="status" aria-live="polite">Idle</p>
     </header>
 
-    <div class="face">
       <section class="stage">
         <div class="pitch-panel">
           <div class="label-row">
@@ -71,6 +73,7 @@
         </div>
       </section>
 
+
       <aside class="rack">
         <div class="rack-body">
         <p class="group">Voice</p>
@@ -126,19 +129,23 @@
         <p class="device-error" id="device-error" hidden></p>
         <button type="button" class="text" id="refresh">Refresh devices</button>
         </div>
+        <button type="button" class="more-toggle" id="more-toggle" aria-expanded="false" aria-controls="more">More settings</button>
         <button type="button" class="start" id="start">Go live</button>
       </aside>
-    </div>
 
-    <section class="tape" aria-label="Converter">
-      <h2>Converter</h2>
-      <p class="log-empty" id="log-empty">Go live to see the converter.</p>
-      <pre id="log" aria-live="polite"></pre>
-    </section>
-
-    <details class="advanced">
-      <summary>More settings</summary>
-      <div class="more">
+      <section class="tape" aria-label="Converter">
+        <h2>Converter</h2>
+        <p class="log-empty" id="log-empty">Go live to see the converter.</p>
+        <pre id="log" aria-live="polite"></pre>
+      </section>
+  </div>
+  <div class="overlay" id="more" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="more-title">
+      <div class="sheet-bar">
+        <h2 id="more-title">More settings</h2>
+        <button type="button" class="text" id="more-close">Close</button>
+      </div>
+<div class="more">
         <section>
           <h3 class="group">Timing</h3>
           <div class="bunch">
@@ -298,7 +305,8 @@
           </div>
         </section>
       </div>
-    </details>
+
+    </div>
   </div>
   <div id="tip-pop" class="tip-pop" role="tooltip" hidden></div>
   <script src="renderer.js"></script>
