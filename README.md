@@ -45,11 +45,12 @@ hf download lj1995/VoiceConversionWebUI --revision main --include "pymss_weights
 
 The live window uses the same options as `inference.realtime --live`. Finish the setup above first. The window does not install Python or the voice models.
 
-Build the exe once:
+Build the exe once (this also builds the React front-end):
 
 ```powershell
 cd desktop
 npm install
+npm --prefix renderer install
 npm run pack
 ```
 
@@ -60,5 +61,17 @@ To open the window without building the exe:
 ```powershell
 cd desktop
 npm install
+npm --prefix renderer install
+npm run renderer:build
 npm start
 ```
+
+For front-end development with live reload, run the Vite dev server and point Electron at it:
+
+```powershell
+cd desktop
+npm run dev                          # in one terminal
+$env:VITE_DEV_SERVER_URL="http://localhost:5173"; npm start   # in another
+```
+
+The front-end source is React + TypeScript in `desktop\renderer`. The Electron main/preload processes are still plain JavaScript (`desktop\main.js`, `desktop\preload.js`).

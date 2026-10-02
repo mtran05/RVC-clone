@@ -130,7 +130,11 @@ function createWindow() {
     win = null;
     if (child) child.kill();
   });
-  win.loadFile(path.join(__dirname, "index.html"));
+  if (process.env.VITE_DEV_SERVER_URL) {
+    win.loadURL(process.env.VITE_DEV_SERVER_URL);
+  } else {
+    win.loadFile(path.join(__dirname, "renderer", "dist", "index.html"));
+  }
 }
 
 // Models live in assets/weights, index files in assets/indices.

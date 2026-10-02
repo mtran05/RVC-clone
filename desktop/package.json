@@ -7,7 +7,9 @@
     "prestart": "node ensure-electron.js",
     "start": "electron .",
     "check": "node args.js && node repo.js",
-    "pack": "electron-builder --win portable"
+    "renderer:build": "npm --prefix renderer run build",
+    "dev": "npm --prefix renderer run dev",
+    "pack": "npm run renderer:build && electron-builder --win portable"
   },
   "devDependencies": {
     "electron": "^33.4.11",
@@ -26,10 +28,7 @@
       "preload.js",
       "args.js",
       "repo.js",
-      "index.html",
-      "renderer.js",
-      "styles.css",
-      "css/**/*.css",
+      "renderer/dist/**/*",
       "logo.svg",
       "logo.png",
       "package.json"

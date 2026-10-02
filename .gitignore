@@ -5,3 +5,5 @@ graphify-out/
 desktop/node_modules/
 desktop/dist/
 **/__pycache__/
+desktop/renderer/node_modules/
+desktop/renderer/dist/

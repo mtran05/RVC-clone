@@ -75,3 +75,9 @@ h2 {
     animation: none !important;
   }
 }
+
+.rail-link { text-decoration: none; display: block; text-align: center; }
+
+
+#root { height: 100%; }
+
