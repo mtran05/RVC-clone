@@ -1,0 +1,71 @@
+.overlay {
+  position: fixed;
+  z-index: 20;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  background: rgba(8, 10, 12, 0.72);
+}
+
+.overlay[hidden] { display: none; }
+
+.sheet {
+  width: min(960px, 100%);
+  max-height: min(82vh, 760px);
+  overflow: auto;
+  padding: 18px 22px 22px;
+  background: var(--bezel);
+  border: 1px solid var(--hair);
+}
+
+.sheet-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.sheet-bar .text { margin: 0; align-self: center; }
+
+.sheet-bar h2 {
+  font-family: var(--display);
+  font-size: 26px;
+  font-weight: 400;
+  color: var(--ink);
+}
+
+.more {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.more .group { margin: 0 0 6px; }
+
+.bunch {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px 16px;
+}
+
+.checks {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.check input { accent-color: var(--filament); width: 15px; height: 15px; }

@@ -1,5 +1,8 @@
 "use strict";
 
+// `npm start` runs this first. If electron.exe was never unpacked, download it and
+// extract it with tar, then write the path file Electron's launcher expects.
+
 const { spawnSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");

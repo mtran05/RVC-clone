@@ -29,6 +29,7 @@
       "index.html",
       "renderer.js",
       "styles.css",
+      "css/**/*.css",
       "package.json"
     ],
     "win": {

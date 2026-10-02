@@ -1,5 +1,8 @@
 "use strict";
 
+// Find the RVC project folder from the desktop app, a portable exe, or a parent directory.
+// A hit is a folder that contains both .venv\Scripts\python.exe and inference\realtime.py.
+
 const fs = require("fs");
 const path = require("path");
 

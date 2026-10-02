@@ -1,5 +1,9 @@
 "use strict";
 
+// Page behavior for the live window.
+// Reads the form, asks the main process to start or stop inference/realtime.py,
+// and keeps the log and device lists in sync with that process.
+
 const statusEl = document.getElementById("status");
 const logEl = document.getElementById("log");
 const startBtn = document.getElementById("start");
@@ -10,11 +14,13 @@ const keyInput = document.getElementById("key");
 let running = false;
 const logLines = [];
 
+// Status text also drives the lamp color: Live, Stopped, or anything else.
 function setStatus(text) {
   statusEl.textContent = text;
   document.body.classList.toggle("stopped", text === "Stopped");
 }
 
+// Keep the newest 80 lines. Older lines are dropped so the log cannot grow forever.
 function pushLog(line) {
   logLines.push(line);
   if (logLines.length > 80) logLines.shift();
@@ -24,17 +30,37 @@ function pushLog(line) {
   if (logEmpty) logEmpty.hidden = true;
 }
 
+// Wipe the stored lines and show the empty-state sentence again.
+function clearLog() {
+  logLines.length = 0;
+  logEl.textContent = "";
+  const logEmpty = document.getElementById("log-empty");
+  if (logEmpty) logEmpty.hidden = false;
+}
+
+// The running Python process does not see later edits, so freeze the controls it was given.
+// Stop, More settings, Clear, and the help buttons stay clickable.
+function setLocked(on) {
+  const nodes = document.querySelectorAll(
+    ".stage input, .stage .step, .rack select, .rack input, .rack .step, #browse-model, #browse-index, #refresh, #more input, #more .step"
+  );
+  for (const el of nodes) el.disabled = on;
+}
+
+// Switch the window between idle and live. The Go live button becomes Stop.
 function setLive(on) {
   running = on;
   document.body.classList.toggle("live", on);
   startBtn.textContent = on ? "Stop" : "Go live";
   setStatus(on ? "Live" : "Idle");
+  setLocked(on);
 }
 
 function baseName(file) {
   return String(file).split(/[/\\]/).pop();
 }
 
+// Rebuild a file dropdown. Keeps the current choice if that path is still in the list.
 function fillSelect(select, files, emptyLabel) {
   const current = select.value;
   select.replaceChildren();
@@ -51,6 +77,7 @@ function fillSelect(select, files, emptyLabel) {
   if ([...select.options].some((option) => option.value === current)) select.value = current;
 }
 
+// Add a browsed file if it was not already listed, then select it.
 function addFile(select, file) {
   if (!file) return;
   if (![...select.options].some((option) => option.value === file)) {
@@ -63,6 +90,8 @@ function addFile(select, file) {
   select.dispatchEvent(new Event("change"));
 }
 
+// Fill a microphone or speaker list, grouped by host API.
+// Prefers the system default for that direction when nothing was already chosen.
 function fillDevices(select, devices, channel) {
   const current = select.value;
   const want = channel === "inputs" ? "input" : "output";
@@ -102,6 +131,7 @@ function fillDevices(select, devices, channel) {
   return groups.size ? [...groups.values()].reduce((sum, list) => sum + list.length, 0) : 0;
 }
 
+// Show a slider's value and paint its filled portion through the --pct custom property.
 function bindRange(id) {
   const input = document.getElementById(id);
   const output = document.getElementById(`${id}-out`);
@@ -127,6 +157,8 @@ function setKey(value) {
   scale.style.setProperty("--pct", `${((next + 24) / 48) * 100}%`);
 }
 
+// Snap a number field onto its step and clamp it to min and max.
+// A blank or broken value falls back to the field's original value.
 function legalNumber(input) {
   const step = Number(input.step);
   const places = (String(input.step).split(".")[1] || "").length;
@@ -138,6 +170,7 @@ function legalNumber(input) {
   input.value = places ? String(Number(value.toFixed(places))) : String(Math.round(value));
 }
 
+// Highest pitch must stay above the lowest. The field the user just edited wins.
 function legalPitchRange(edited) {
   const minEl = document.getElementById("f0-min");
   const maxEl = document.getElementById("f0-max");
@@ -155,6 +188,7 @@ function legalPitchRange(edited) {
   maxEl.value = String(min + 1);
 }
 
+// Latency is empty, low, high, or a number of seconds. Anything else is cleared.
 function legalLatency(input) {
   const value = input.value.trim().toLowerCase();
   if (!value || value === "low" || value === "high" || Number.isFinite(Number(value))) {
@@ -164,6 +198,7 @@ function legalLatency(input) {
   input.value = "";
 }
 
+// Correct every field before Go live so the process never receives a bad value.
 function legalFields() {
   for (const input of document.querySelectorAll('input[type="number"]')) {
     if (input.id === "key") continue;
@@ -173,6 +208,7 @@ function legalFields() {
   legalLatency(document.getElementById("latency"));
 }
 
+// Shape the form into the object main.js turns into CLI flags.
 function readOpts() {
   legalFields();
   const value = (id) => document.getElementById(id).value;
@@ -208,6 +244,7 @@ function readOpts() {
   };
 }
 
+// Reload the microphone and speaker lists from Python.
 async function refreshDevices() {
   if (!window.rvc) return;
   const errorEl = document.getElementById("device-error");
@@ -237,6 +274,7 @@ async function refreshDevices() {
 const more = document.getElementById("more");
 const moreToggle = document.getElementById("more-toggle");
 
+// Show or hide the extra-settings overlay. Focus moves into it, then back to the button.
 function setMore(open) {
   if (more.hidden === !open) return;
   more.hidden = !open;
@@ -251,6 +289,7 @@ more.addEventListener("click", (event) => {
   if (event.target === more) setMore(false);
 });
 
+// Pitch already has its own minus and plus. Every other number field gets the same pair.
 for (const input of document.querySelectorAll('input[type="number"]')) {
   if (input.closest(".nudge")) continue;
   const nudge = document.createElement("div");
@@ -270,6 +309,7 @@ for (const input of document.querySelectorAll('input[type="number"]')) {
   nudge.append(down, input, up);
 }
 
+// Minus sits before the field, plus after it. Pitch updates the scale as well as the number.
 document.body.addEventListener("click", (event) => {
   const button = event.target.closest(".nudge .step");
   if (!button) return;
@@ -321,12 +361,14 @@ document.getElementById("refresh").addEventListener("click", refreshDevices);
 const tipPop = document.getElementById("tip-pop");
 let tipBtn = null;
 
+// One help popup is open at a time. The text comes from the hidden paragraph named by the button.
 function closeTip() {
   if (tipBtn) tipBtn.setAttribute("aria-expanded", "false");
   tipBtn = null;
   tipPop.hidden = true;
 }
 
+// Keep the popup inside the control's box when it fits, otherwise inside the window.
 function placeTip() {
   if (!tipBtn) return;
   const box = tipBtn.getBoundingClientRect();
@@ -383,6 +425,9 @@ document.addEventListener("scroll", () => {
   if (tipBtn) closeTip();
 }, true);
 
+document.getElementById("clear-log").addEventListener("click", clearLog);
+
+// Go live sends the form once. Stop kills that process. A failed start only writes the error.
 startBtn.addEventListener("click", async () => {
   if (!window.rvc) return;
   if (running) {
@@ -402,6 +447,7 @@ fillSelect(indexSelect, [], "None");
 fillDevices(document.getElementById("input-device"), [], "inputs");
 fillDevices(document.getElementById("output-device"), [], "outputs");
 
+// Opening index.html in a browser has no Electron bridge, so the page stays in preview.
 if (!window.rvc) {
   setStatus("Preview");
 } else {

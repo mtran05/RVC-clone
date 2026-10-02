@@ -1,5 +1,7 @@
 "use strict";
 
+// The only API the page may call. Names match the ipc handlers in main.js.
+
 const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("rvc", {
