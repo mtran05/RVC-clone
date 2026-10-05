@@ -18,7 +18,7 @@
 .tape { grid-column: 2 / -1; grid-row: 3; }
 .page { grid-column: 2 / -1; grid-row: 2 / -1; }
 
-.desk:not([data-page="live"]) :is(.stage, .rack, .tape) { display: none; }
+.desk:not(:is([data-page="live"], [data-page="sfx"])) :is(.stage, .rack, .tape) { display: none; }
 
 .page {
   display: flex;

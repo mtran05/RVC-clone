@@ -146,17 +146,34 @@ ipcMain.handle("assets", () => {
   };
 });
 
-// kind is "model" or "index". Returns the chosen path, or null if cancelled.
+// kind is "model", "index", or "audio". Returns the chosen path, or null if cancelled.
 ipcMain.handle("browse", async (_event, kind) => {
-  const model = kind === "model";
+  let title = "Select File";
+  let defaultPath;
+  let filters = [];
+
+  if (kind === "model") {
+    title = "Voice model";
+    defaultPath = root ? path.join(root, "assets", "weights") : undefined;
+    filters = [{ name: "Voice model", extensions: ["pth"] }];
+  } else if (kind === "index") {
+    title = "Index";
+    defaultPath = root ? path.join(root, "assets", "indices") : undefined;
+    filters = [{ name: "Index", extensions: ["index"] }];
+  } else if (kind === "audio") {
+    title = "Audio file";
+    filters = [
+      { name: "Audio Files", extensions: ["mp3", "wav", "ogg", "flac", "m4a", "aac"] }
+    ];
+  }
+
   const result = await dialog.showOpenDialog(win, {
-    title: model ? "Voice model" : "Index",
-    defaultPath: root ? path.join(root, "assets", model ? "weights" : "indices") : undefined,
+    title,
+    defaultPath,
     properties: ["openFile"],
-    filters: model
-      ? [{ name: "Voice model", extensions: ["pth"] }]
-      : [{ name: "Index", extensions: ["index"] }],
+    filters,
   });
+
   if (result.canceled || !result.filePaths[0]) return null;
   return result.filePaths[0];
 });
