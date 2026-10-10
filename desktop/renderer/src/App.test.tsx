@@ -28,7 +28,7 @@ describe("the app", () => {
     render(<App />);
     const rail = screen.getByRole("navigation", { name: "Pages" });
     expect(within(rail).getByRole("link", { name: "Live" })).toBeTruthy();
-    expect(within(rail).getByRole("link", { name: "Saved" })).toBeTruthy();
+    expect(within(rail).getByRole("link", { name: "Presets" })).toBeTruthy();
     expect(within(rail).getByRole("link", { name: "SFX" })).toBeTruthy();
   });
 
@@ -106,8 +106,9 @@ describe("the app", () => {
 
   it("walks between the placeholder pages", () => {
     render(<App />);
-    fireEvent.click(screen.getByRole("link", { name: "Saved" }));
+    fireEvent.click(screen.getByRole("link", { name: "Presets" }));
     expect(screen.getByText("Coming soon.")).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Presets" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Go live" })).toBeNull();
 
     fireEvent.click(screen.getByRole("link", { name: "SFX" }));

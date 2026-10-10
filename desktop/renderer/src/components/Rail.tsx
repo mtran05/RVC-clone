@@ -4,7 +4,7 @@ import styles from "./Rail.module.css";
 
 const PAGES = [
   { to: "/live", label: "Live" },
-  { to: "/saved", label: "Saved" },
+  { to: "/presets", label: "Presets" },
   { to: "/sfx", label: "SFX" },
 ];
 

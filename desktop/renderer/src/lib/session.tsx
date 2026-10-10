@@ -9,7 +9,7 @@ import { useLog } from "../hooks/useLog";
 // device list.
 //
 // This lives above the router so a background inference process keeps reporting
-// while the user is on the Saved or SFX page, and so returning to Live restores
+// while the user is on the Presets or SFX page, and so returning to Live restores
 // the previous settings and device list instead of resetting them.
 export interface Session {
   running: boolean;

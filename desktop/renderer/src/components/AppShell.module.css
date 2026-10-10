@@ -2,7 +2,9 @@
   position: relative;
   z-index: 1;
   height: 100%;
-  --rail: 76px;
+  /* Wide enough for the longest page name on one line. "Presets" needs about
+     52px of text; the rail's own padding and the link's padding take 25 more. */
+  --rail: 88px;
   display: grid;
   grid-template-columns: var(--rail) minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr);

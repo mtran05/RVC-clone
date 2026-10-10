@@ -1,7 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import Rail from "./Rail";
 import LivePage from "../pages/LivePage";
-import SavedPage from "../pages/SavedPage";
+import PresetsPage from "../pages/PresetsPage";
 import SfxPage from "../pages/SfxPage";
 import { useSession } from "../lib/session";
 import styles from "./AppShell.module.css";
@@ -26,7 +26,7 @@ export default function AppShell() {
       <main className={styles.content}>
         <Routes>
           <Route path="/live" element={<LivePage />} />
-          <Route path="/saved" element={<SavedPage />} />
+          <Route path="/presets" element={<PresetsPage />} />
           <Route path="/sfx" element={<SfxPage />} />
           <Route path="*" element={<Navigate to="/live" replace />} />
         </Routes>
