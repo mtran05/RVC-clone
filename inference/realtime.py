@@ -11,6 +11,7 @@ Live mode plays the microphone through the default speakers:
 """
 
 import argparse
+import json
 import logging
 from pathlib import Path
 
@@ -25,6 +26,11 @@ from inference.rtrvc import RVC
 
 
 logger = logging.getLogger(__name__)
+
+# Every option's flag, type, choices, and starting value live in one file shared
+# with desktop/args.js and the desktop app's UI, so the three cannot drift.
+OPT_SPEC_PATH = Path(__file__).resolve().parent.parent / "desktop" / "shared" / "opts-spec.json"
+OPT_SPEC = json.loads(OPT_SPEC_PATH.read_text(encoding="utf-8"))["options"]
 
 
 class DeviceConfig:
@@ -455,46 +461,34 @@ def _list_devices():
         )
 
 
+def _add_spec_arguments(parser):
+    """Add one argparse argument per option described in the shared spec."""
+    for spec in OPT_SPEC.values():
+        kind = spec["kind"]
+        if kind == "bool":
+            parser.add_argument(spec["flag"], action="store_true", default=spec["default"], help=spec["cliHelp"])
+        elif kind == "enum":
+            parser.add_argument(spec["flag"], choices=tuple(spec["choices"]), default=spec["default"], help=spec["cliHelp"])
+        elif kind == "number":
+            parser.add_argument(spec["flag"], type=int if spec.get("integer") else float, default=spec["default"], help=spec["cliHelp"])
+        else:
+            parser.add_argument(spec["flag"], default=spec["default"], help=spec["cliHelp"])
+
+
 def main(argv=None):
     """Parse the real-time CLI and run file mode, live mode, or device listing."""
     parser = argparse.ArgumentParser(description="Real-time RVC voice conversion")
-    parser.add_argument("--model", help="Path to a trained .pth voice model")
-    parser.add_argument("--index", help="Optional .index retrieval file")
     parser.add_argument("--input", help="Input wav/flac/ogg file")
     parser.add_argument("--output", help="Output wav path for file mode")
     parser.add_argument("--live", action="store_true", help="Convert the microphone live")
     parser.add_argument("--list-devices", action="store_true", help="Print audio devices and exit")
-    parser.add_argument("--key", type=int, default=0, help="Pitch shift in semitones")
-    parser.add_argument("--formant", type=float, default=0.0, help="Formant shift in semitones")
-    parser.add_argument("--index-rate", type=float, default=0.75, help="Index blend from 0 to 1")
-    parser.add_argument("--f0", choices=("rmvpe", "fcpe", "pm"), default="rmvpe")
-    parser.add_argument("--sample-rate", type=int, default=0, help="0 uses the model sample rate")
-    parser.add_argument("--block-time", type=float, default=0.25, help="Block size in seconds")
-    parser.add_argument("--crossfade-time", type=float, default=0.05)
-    parser.add_argument("--extra-time", type=float, default=2.5, help="Context kept before each block")
-    parser.add_argument("--rms-mix-rate", type=float, default=0.0, help="1 keeps the converted loudness")
-    parser.add_argument("--input-device", help="Microphone number or name. Default is the system input")
-    parser.add_argument("--output-device", help="Speaker number or name. Default is the system output")
-    parser.add_argument("--host-api", help="Only match devices on this PortAudio host, such as WASAPI")
-    parser.add_argument("--input-channels", type=int, default=1, help="Microphone channels to open, then mix to mono")
-    parser.add_argument("--output-channels", type=int, default=2, help="Speaker channels. Mono audio is copied to each")
-    parser.add_argument("--latency", help="low, high, or seconds. Default lets PortAudio choose")
-    parser.add_argument("--input-gain", type=float, default=1.0, help="Multiply the microphone or file before conversion")
-    parser.add_argument("--output-gain", type=float, default=1.0, help="Multiply the converted audio")
-    parser.add_argument("--no-clip", action="store_true", help="Leave samples outside -1..1 instead of clipping")
-    parser.add_argument("--wasapi-exclusive", action="store_true", help="Open WASAPI devices in exclusive mode")
-    parser.add_argument("--wasapi-auto-convert", action="store_true", help="Let WASAPI resample if the rate differs")
-    parser.add_argument("--f0-min", type=float, default=50.0, help="Lowest pitch treated as voiced, in Hz")
-    parser.add_argument("--f0-max", type=float, default=1100.0, help="Highest pitch, in Hz")
-    parser.add_argument("--rmvpe-threshold", type=float, default=0.03, help="RMVPE voicing threshold")
-    parser.add_argument("--fcpe-threshold", type=float, default=0.006, help="FCPE voicing threshold")
-    parser.add_argument("--index-neighbors", type=int, default=8, help="How many index vectors to blend")
     parser.add_argument(
         "--subtype",
         default="FLOAT",
         choices=("FLOAT", "PCM_16", "PCM_24", "PCM_32"),
         help="Wav sample format for file mode",
     )
+    _add_spec_arguments(parser)
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")

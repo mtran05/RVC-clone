@@ -1,56 +1,32 @@
-import { InferenceOpts } from "./bridge";
+import { boundsOf } from "./specs";
 
-// Starting values mirror inference/realtime.py's argument defaults.
-export const defaultOpts: InferenceOpts = {
-  model: "",
-  index: "",
-  indexRate: 0.75,
-  key: 0,
-  formant: 0,
-  f0: "rmvpe",
-  sampleRate: 0,
-  blockTime: 0.25,
-  crossfadeTime: 0.05,
-  extraTime: 2.5,
-  rmsMixRate: 0,
-  inputDevice: "",
-  outputDevice: "",
-  hostApi: "",
-  inputChannels: 1,
-  outputChannels: 2,
-  latency: "",
-  inputGain: 1,
-  outputGain: 1,
-  noClip: false,
-  wasapiExclusive: false,
-  wasapiAutoConvert: false,
-  f0Min: 50,
-  f0Max: 1100,
-  rmvpeThreshold: 0.03,
-  fcpeThreshold: 0.006,
-  indexNeighbors: 8,
-};
+// Numeric helpers. Every bound comes from the shared option spec, so the UI can
+// never drift from what desktop/args.js accepts.
 
-// Pitch is capped at two octaves (−24..+24 semitones), matching the slider scale.
-export function clampKey(value: number): number {
-  if (!Number.isFinite(value)) value = 0;
-  return Math.max(-24, Math.min(24, Math.round(value)));
+interface Bounds {
+  /** Snap to a multiple of this. Omitted or non-positive means "leave alone". */
+  step?: number;
+  min?: number;
+  max?: number;
+  /** Used when the incoming value is not finite. */
+  fallback?: number;
 }
 
 // Snap a number to its step and clamp to min/max. Non-finite input falls back.
-export function legalNumber(
-  value: number,
-  step: number,
-  min: number | null,
-  max: number | null,
-  fallback: number
-): number {
+export function legalNumber(value: number, { step, min, max, fallback = 0 }: Bounds = {}): number {
   if (!Number.isFinite(value)) value = fallback;
-  if (Number.isFinite(step) && step > 0) value = Math.round(value / step) * step;
+  if (step != null && Number.isFinite(step) && step > 0) value = Math.round(value / step) * step;
   if (min != null) value = Math.max(min, value);
   if (max != null) value = Math.min(max, value);
-  const places = (String(step).split(".")[1] || "").length;
-  return places ? Number(value.toFixed(places)) : Math.round(value);
+  const places = step != null && Number.isFinite(step) ? (String(step).split(".")[1] || "").length : 0;
+  const snapped = places ? Number(value.toFixed(places)) : Math.round(value);
+  // toFixed and Math.round both hand back -0, which reads oddly in a number input.
+  return Object.is(snapped, -0) ? 0 : snapped;
+}
+
+// Pitch is capped at two octaves, matching the dial scale.
+export function clampKey(value: number): number {
+  return legalNumber(value, { ...boundsOf("key"), fallback: 0 });
 }
 
 // Latency accepts nothing, "low", "high", or seconds; anything else is blanked.

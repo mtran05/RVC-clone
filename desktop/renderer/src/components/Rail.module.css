@@ -1,0 +1,80 @@
+/* AppShell owns the desk grid; a component owns its own cell in it. Without
+   this the rail auto-places into the first row only and stops short of the
+   bottom, and that row grows to the rail's height and drags the masthead
+   down with it. */
+.rail {
+  grid-column: 1;
+  grid-row: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 8px;
+  background: var(--well);
+  border-right: 1px solid var(--hair);
+}
+
+.brand {
+  margin: 0 0 14px;
+  display: flex;
+  justify-content: center;
+}
+
+.brand img {
+  display: block;
+  width: 36px;
+  height: 36px;
+}
+
+.link {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--dim);
+  font-weight: 600;
+  line-height: 1.2;
+  padding: 12px 4px;
+  overflow-wrap: anywhere;
+  text-decoration: none;
+  display: block;
+  text-align: center;
+}
+
+.link:hover {
+  color: var(--ink);
+}
+
+/* The active page is marked with a filament edge down the rail's inner side. */
+.current {
+  color: var(--ink);
+  box-shadow: inset 2px 0 0 var(--filament);
+}
+
+/* Narrow windows turn the rail into a top bar, so the marker moves to the
+   bottom edge. */
+/* Narrow windows turn the rail into a top bar above the content, so it takes
+   a single row instead of spanning them all. */
+@media (max-width: 760px) {
+  .rail {
+    grid-column: 1;
+    grid-row: 1;
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border-right: 0;
+    border-bottom: 1px solid var(--hair);
+  }
+
+  .brand {
+    margin: 0 10px 0 6px;
+  }
+
+  .link {
+    width: auto;
+    padding: 12px 14px;
+  }
+
+  .current {
+    box-shadow: inset 0 -2px 0 var(--filament);
+  }
+}

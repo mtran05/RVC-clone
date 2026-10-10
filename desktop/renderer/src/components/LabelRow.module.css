@@ -1,0 +1,15 @@
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.name {
+  margin: 0;
+}
+
+.row > output {
+  margin-left: auto;
+}

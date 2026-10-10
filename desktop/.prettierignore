@@ -1,0 +1,5 @@
+node_modules/
+dist/
+package-lock.json
+renderer/dist/
+renderer/src/shared/

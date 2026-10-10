@@ -1,0 +1,46 @@
+.nudge {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+}
+
+.input {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  height: 34px;
+  border-left: 0;
+  border-right: 0;
+  border-radius: 0;
+}
+
+.step {
+  flex: none;
+  width: 44px;
+  height: 34px;
+  border: 1px solid var(--hair);
+  border-radius: 2px;
+  background: transparent;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.step:hover:not(:disabled) {
+  border-color: var(--ink);
+}
+
+.step:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* Chromium draws spinner arrows that fight the custom steppers. */
+.nudge input::-webkit-outer-spin-button,
+.nudge input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.nudge input {
+  appearance: textfield;
+}
