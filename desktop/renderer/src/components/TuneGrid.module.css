@@ -1,0 +1,21 @@
+.bunch {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px 16px;
+}
+
+/* Toggles read as one row of switches spanning the grid, matching the other
+   fields that break out of the four-column layout. */
+.checks {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+
+@media (max-width: 760px) {
+  .bunch {
+    grid-template-columns: 1fr;
+  }
+}

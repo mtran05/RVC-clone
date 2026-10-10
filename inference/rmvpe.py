@@ -10,7 +10,7 @@ from librosa.filters import mel
 from librosa.util import pad_center
 from scipy.signal import get_window
 
-from tools.cuda_graph import run_cuda_graph
+from inference.cuda_graph import run_cuda_graph
 
 logger = logging.getLogger(__name__)
 
@@ -514,12 +514,13 @@ class RMVPE:
         if isinstance(is_half, str):
             is_half = is_half.lower() == "true"
         if device is None:
-            from configs.config import infer_device, infer_dtype
+            from inference.device import detect_device
 
-            device = str(infer_device)
-            is_half = infer_dtype == torch.float16
+            detected = detect_device()
+            device = str(detected.device)
+            is_half = detected.is_half
         elif str(device).startswith("cuda"):
-            from configs.config import get_device_dtype_sm
+            from inference.device import get_device_dtype_sm
 
             parsed_device = torch.device(device)
             device_index = parsed_device.index

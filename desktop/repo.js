@@ -26,19 +26,4 @@ function findRepo(starts, exists = fs.existsSync) {
   return null;
 }
 
-function check(cond, message) {
-  if (!cond) throw new Error(message);
-}
-
-if (require.main === module) {
-  const root = path.resolve("/proj");
-  const python = path.join(root, ".venv", "Scripts", "python.exe");
-  const entry = path.join(root, "inference", "realtime.py");
-  const hit = new Set([python, entry]);
-  const found = findRepo([path.join(root, "desktop", "dist")], (file) => hit.has(file));
-  check(found && found.root === root && found.python === python, "exe folder should find the project");
-  check(findRepo([path.join(root, "desktop", "dist")], () => false) === null, "missing project should fail");
-  console.log("repo ok");
-}
-
 module.exports = { findRepo };

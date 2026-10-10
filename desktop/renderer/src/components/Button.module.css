@@ -1,0 +1,85 @@
+.ghost,
+.more,
+.start,
+.text {
+  border-radius: 2px;
+}
+
+.ghost {
+  height: 32px;
+  padding: 0 10px;
+  background: transparent;
+  border: 1px solid var(--hair);
+}
+
+.ghost:hover:not(:disabled) {
+  border-color: var(--ink);
+}
+
+.more {
+  flex-shrink: 0;
+  align-self: stretch;
+  margin: 8px 16px 0;
+  height: 36px;
+  border: 1px solid var(--hair);
+  background: transparent;
+  font-weight: 600;
+}
+
+.more:hover:not(:disabled) {
+  border-color: var(--ink);
+}
+
+.text {
+  align-self: flex-start;
+  margin: 0 0 12px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--dim);
+  font-size: 14px;
+}
+
+.text:hover:not(:disabled) {
+  color: var(--ink);
+}
+
+.start {
+  flex-shrink: 0;
+  align-self: stretch;
+  margin: 8px 16px 12px;
+  height: 44px;
+  border: 1px solid var(--ink);
+  background: var(--well);
+  font-family: var(--display);
+  font-size: 22px;
+}
+
+.start:hover:not(:disabled) {
+  background: rgba(215, 224, 228, 0.06);
+}
+
+/* While converting the button becomes the stop control: lit, and unmistakable. */
+.start[data-running="true"] {
+  border-color: var(--filament);
+  background: var(--filament);
+  color: #1c0c08;
+}
+
+.start[data-running="true"]:hover {
+  background: #c94e2b;
+}
+
+.ghost:disabled,
+.more:disabled,
+.start:disabled,
+.text:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+@media (max-width: 760px) {
+  .start {
+    margin-top: 16px;
+  }
+}

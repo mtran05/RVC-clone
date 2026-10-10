@@ -1,95 +1,67 @@
-import { useEffect, useRef, useState } from "react";
-import { bridge, Device, InferenceOpts } from "../lib/bridge";
-import { clampKey, legalLatency, legalNumber } from "../lib/opts";
+import { useEffect, useId, useRef, useState } from "react";
+import { bridge } from "../lib/bridge";
+import { clampKey } from "../lib/opts";
+import { sanitizeOpts } from "../lib/sanitize";
+import { rangeOf, specOf } from "../lib/specs";
 import { useSession } from "../lib/session";
+import BrowseField from "../components/BrowseField";
+import Button from "../components/Button";
+import DeviceSelect from "../components/DeviceSelect";
 import Field from "../components/Field";
-import TipButton from "../components/TipButton";
-import NudgeNumber from "../components/NudgeNumber";
-import RangeField from "../components/RangeField";
+import LabelRow from "../components/LabelRow";
 import MoreSettings from "../components/MoreSettings";
+import NudgeNumber from "../components/NudgeNumber";
+import RadioChoices from "../components/RadioChoices";
+import RangeField from "../components/RangeField";
+import styles from "./LivePage.module.css";
 
-// The live page: pitch controls on the left, voice/device settings in the right
-// rack, and the Python process log along the bottom.
-function baseName(file: string): string {
-  return String(file).split(/[/\\]/).pop() ?? file;
-}
+const F0_METHODS = ["rmvpe", "fcpe", "pm"] as const;
 
-const HOST_RANK = ["Windows WASAPI", "MME", "Windows DirectSound", "Windows WDM-KS"];
+const KEY = specOf("key");
+const KEY_RANGE = rangeOf("key");
+const F0 = specOf("f0");
+const FORMANT = specOf("formant");
+const LOUDNESS = specOf("rmsMixRate");
+const LOUDNESS_RANGE = rangeOf("rmsMixRate");
+const INDEX_RATE = specOf("indexRate");
+const INDEX_RATE_RANGE = rangeOf("indexRate");
+const MODEL = specOf("model");
+const INDEX = specOf("index");
+const INPUT_DEVICE = specOf("inputDevice");
+const OUTPUT_DEVICE = specOf("outputDevice");
 
-// Microphone/speaker dropdown, grouped by PortAudio host API. "System default"
-// is the empty value, which tells the inference process to follow Windows.
-function DeviceSelect({
-  id,
-  devices,
-  channel,
-  value,
-  disabled,
-  onChange,
-}: {
-  id: string;
-  devices: Device[];
-  channel: "inputs" | "outputs";
-  value: string;
-  disabled?: boolean;
-  onChange: (value: string) => void;
-}) {
-  const groups = new Map<string, Device[]>();
-  for (const device of devices) {
-    if (device[channel] < 1) continue;
-    const host = device.host || "Other";
-    if (!groups.has(host)) groups.set(host, []);
-    groups.get(host)!.push(device);
-  }
-  const hosts = [...groups.keys()].sort((a, b) => {
-    const ia = HOST_RANK.indexOf(a);
-    const ib = HOST_RANK.indexOf(b);
-    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);
-  });
-  return (
-    <select id={id} className="control" value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
-      <option value="">System default</option>
-      {hosts.map((host) => (
-        <optgroup key={host} label={host}>
-          {groups.get(host)!.map((d) => (
-            <option key={d.index} value={String(d.index)}>
-              {d.note ? `${d.name} (${d.note})` : d.name}
-            </option>
-          ))}
-        </optgroup>
-      ))}
-    </select>
-  );
-}
-
+// The live page: pitch controls on the left, voice and device settings in the
+// right rack, and the Python process log along the bottom.
 export default function LivePage() {
-  const { running, logLines, pushLog, clearLog, setLive, devices, deviceCount, deviceError, refreshDevices, opts, setOpt, setOpts } =
-    useSession();
+  const { running, logLines, pushLog, clearLog, setLive, devices, scan, refreshDevices, opts, setOpts } = useSession();
   const [models, setModels] = useState<string[]>([]);
   const [indices, setIndices] = useState<string[]>([]);
   const [moreOpen, setMoreOpen] = useState(false);
   const logRef = useRef<HTMLPreElement>(null);
+  // The legend names the radio group, so both need the same id.
+  const trackerLabelId = useId();
 
-  const set = setOpt;
+  const patch = (change: Partial<typeof opts>) => setOpts((current) => ({ ...current, ...change }));
 
   // Load the model/index lists once. A single model auto-selects.
   useEffect(() => {
     const rvc = bridge();
     if (!rvc) return;
-    rvc.assets().then((assets) => {
+    void rvc.assets().then((assets) => {
       setModels(assets.models);
       setIndices(assets.indices);
-      if (assets.models.length === 1) set("model", assets.models[0]);
+      // A lone model needs no decision from the user.
+      if (assets.models.length === 1) setOpts((current) => ({ ...current, model: assets.models[0] }));
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [setOpts]);
 
   // Auto-scroll the log when a new line arrives.
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
   }, [logLines]);
 
-  // Toggle "Run live / Stop": a running process is stopped; otherwise sanitize
-  // the form and send it to main.js, which spawns inference/realtime.py.
+  // Toggle "Go live / Stop". A running process is stopped; otherwise the form is
+  // sanitized and handed to main.js, which spawns inference/realtime.py.
   const goLive = async () => {
     const rvc = bridge();
     if (!rvc) return;
@@ -97,14 +69,7 @@ export default function LivePage() {
       await rvc.stop();
       return;
     }
-    const cleaned: InferenceOpts = {
-      ...opts,
-      latency: legalLatency(opts.latency),
-      hostApi: opts.hostApi.trim(),
-      f0Min: legalNumber(opts.f0Min, 1, 1, null, 50),
-      f0Max: legalNumber(opts.f0Max, 1, 1, null, 1100),
-    };
-    if (cleaned.f0Max <= cleaned.f0Min) cleaned.f0Max = cleaned.f0Min + 1;
+    const cleaned = sanitizeOpts(opts);
     setOpts(cleaned);
     const result = await rvc.start(cleaned);
     if (!result.ok) {
@@ -114,219 +79,144 @@ export default function LivePage() {
     setLive(true);
   };
 
-  // Keep the pitch range sane: editing one bound never lets it cross the other.
-  const setPitchRange = (edited: "min" | "max", value: number) => {
-    setOpts((o) => {
-      const next = { ...o };
-      if (edited === "min") {
-        next.f0Min = legalNumber(value, 1, 1, null, 50);
-        if (next.f0Max <= next.f0Min) next.f0Max = next.f0Min + 1;
-      } else {
-        next.f0Max = legalNumber(value, 1, 1, null, 1100);
-        if (next.f0Max <= next.f0Min) next.f0Min = Math.max(1, next.f0Max - 1);
-      }
-      return next;
-    });
-  };
-
-  // A browsed-in file always stays selectable, even if it is outside assets/.
-  const modelOptions = models.includes(opts.model) ? models : opts.model ? [opts.model, ...models] : models;
-  const indexOptions = indices.includes(opts.index) ? indices : opts.index ? [opts.index, ...indices] : indices;
-
   return (
-    <>
-      <section className="stage">
-        <div className="pitch-panel">
-          <div className="label-row">
-            <span className="panel-label">Pitch</span>
-            <TipButton
-              label="About pitch"
-              text="Moves your voice up or down. A higher number sounds higher. A lower number sounds lower. It stops at two octaves."
-            />
-          </div>
-          <div className="dial">
-            <div className="ticks" aria-hidden="true">
+    <div className={styles.live}>
+      <section className={styles.stage}>
+        <div className={styles.pitchPanel}>
+          <LabelRow as="span" label={KEY.label} tip={KEY.tip} />
+          <div className={styles.dial}>
+            <div className={styles.ticks} aria-hidden="true">
               <span>−24</span>
               <span>−12</span>
               <span>0</span>
               <span>+12</span>
               <span>+24</span>
             </div>
-            <input
-              id="key-scale"
-              type="range"
-              min="-24"
-              max="24"
-              step="1"
+            <RangeField
+              variant="dial"
               value={opts.key}
+              min={KEY_RANGE.min}
+              max={KEY_RANGE.max}
+              step={1}
               disabled={running}
-              aria-label="Pitch scale"
-              className={opts.key !== 0 ? "shifted" : ""}
-              style={{ "--pct": `${((opts.key + 24) / 48) * 100}%` } as React.CSSProperties}
-              onChange={(e) => set("key", clampKey(Number(e.target.value)))}
+              ariaLabel="Pitch scale"
+              onChange={(key) => patch({ key: clampKey(key) })}
             />
-            <div className="readout">
+            <div className={styles.readout}>
               <NudgeNumber
-                id="key"
+                className={opts.key !== 0 ? styles.shifted : undefined}
                 value={opts.key}
                 step={1}
-                min={-24}
-                max={24}
+                min={KEY_RANGE.min}
+                max={KEY_RANGE.max}
                 disabled={running}
                 ariaLabel="Pitch in semitones"
-                className={opts.key !== 0 ? "shifted" : ""}
-                onChange={(v) => set("key", clampKey(v))}
+                onChange={(key) => patch({ key: clampKey(key) })}
               />
-              <span className="unit">semitones</span>
+              <span className={styles.unit}>semitones</span>
             </div>
           </div>
         </div>
 
-        <fieldset>
-          <div className="label-row">
-            <legend>Pitch tracker</legend>
-            <TipButton
-              label="About pitch tracker"
-              text="How the app hears the note you are singing. RMVPE is the usual choice. FCPE uses less of the computer. PM is the older method."
-            />
-          </div>
-          <div className="choices">
-            {(["rmvpe", "fcpe", "pm"] as const).map((method) => (
-              <label key={method}>
-                <input
-                  type="radio"
-                  name="f0"
-                  value={method}
-                  checked={opts.f0 === method}
-                  disabled={running}
-                  onChange={() => set("f0", method)}
-                />
-                {method.toUpperCase()}
-              </label>
-            ))}
-          </div>
+        <fieldset className={styles.tracker}>
+          <LabelRow as="legend" id={trackerLabelId} label={F0.label} tip={F0.tip} />
+          <RadioChoices id={trackerLabelId} name="f0" value={opts.f0} options={F0_METHODS} disabled={running} onChange={(f0) => patch({ f0 })} />
         </fieldset>
 
-        <div className="pair">
-          <section>
-            <Field id="formant" label="Formant" tipLabel="About formant" tip="Makes the voice brighter or darker without moving the note as much. 0 leaves the tone alone.">
-              <NudgeNumber id="formant" value={opts.formant} step={0.1} disabled={running} onChange={(v) => set("formant", v)} />
-            </Field>
-          </section>
-          <section>
-            <Field
-              id="rms-mix-rate"
-              label="Loudness mix"
-              tipLabel="About loudness mix"
-              tip="0 follows how loud you are. 1 keeps the loudness of the chosen voice."
-              extra={<output id="rms-mix-rate-out">{opts.rmsMixRate.toFixed(2)}</output>}
-            >
-              <RangeField id="rms-mix-rate" value={opts.rmsMixRate} min={0} max={1} step={0.01} disabled={running} onChange={(v) => set("rmsMixRate", v)} />
-            </Field>
-          </section>
+        <div className={styles.pair}>
+          <Field label={FORMANT.label} tip={FORMANT.tip}>
+            <NudgeNumber value={opts.formant} step={FORMANT.step} disabled={running} onChange={(formant) => patch({ formant })} />
+          </Field>
+          <Field label={LOUDNESS.label} tip={LOUDNESS.tip} extra={<output>{opts.rmsMixRate.toFixed(2)}</output>}>
+            <RangeField
+              value={opts.rmsMixRate}
+              min={LOUDNESS_RANGE.min}
+              max={LOUDNESS_RANGE.max}
+              step={LOUDNESS.step!}
+              disabled={running}
+              onChange={(rmsMixRate) => patch({ rmsMixRate })}
+            />
+          </Field>
         </div>
       </section>
 
-      <aside className="rack">
-        <div className="rack-body">
-          <p className="group">Voice</p>
-          <Field id="model" label="Model" tipLabel="About model" tip="The voice you want to sound like. Pick one before you go live.">
-            <div className="row">
-              <select id="model" className="control" value={opts.model} disabled={running} onChange={(e) => set("model", e.target.value)}>
-                <option value="">Choose a model</option>
-                {modelOptions.map((m) => (
-                  <option key={m} value={m}>
-                    {baseName(m)}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                className="ghost"
-                id="browse-model"
-                disabled={running}
-                onClick={async () => {
-                  const file = await bridge()?.browse("model");
-                  if (!file) return;
-                  setModels((m) => (m.includes(file) ? m : [...m, file]));
-                  set("model", file);
-                }}
-              >
-                Browse
-              </button>
-            </div>
-          </Field>
-          <Field id="index" label="Index" tipLabel="About index" tip="An optional file that pulls the result closer to that voice. None turns this off.">
-            <div className="row">
-              <select id="index" className="control" value={opts.index} disabled={running} onChange={(e) => set("index", e.target.value)}>
-                <option value="">None</option>
-                {indexOptions.map((i) => (
-                  <option key={i} value={i}>
-                    {baseName(i)}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                className="ghost"
-                id="browse-index"
-                disabled={running}
-                onClick={async () => {
-                  const file = await bridge()?.browse("index");
-                  if (!file) return;
-                  setIndices((list) => (list.includes(file) ? list : [...list, file]));
-                  set("index", file);
-                }}
-              >
-                Browse
-              </button>
-            </div>
-          </Field>
-          <Field
-            id="index-rate"
-            label="Index rate"
-            tipLabel="About index rate"
-            tip="How much the index file is used. 0 uses only the voice. 1 leans on the index as much as it can."
-            extra={<output id="index-rate-out">{opts.indexRate.toFixed(2)}</output>}
-          >
-            <RangeField id="index-rate" value={opts.indexRate} min={0} max={1} step={0.01} disabled={running} onChange={(v) => set("indexRate", v)} />
+      <aside className={styles.rack}>
+        <div className={styles.rackBody}>
+          <h3 className={styles.group}>Voice</h3>
+          <BrowseField
+            kind="model"
+            label={MODEL.label}
+            tip={MODEL.tip}
+            placeholder="Choose a model"
+            value={opts.model}
+            options={models}
+            disabled={running}
+            onBrowse={(file) => setModels((list) => (list.includes(file) ? list : [...list, file]))}
+            onChange={(model) => patch({ model })}
+          />
+          <BrowseField
+            kind="index"
+            label={INDEX.label}
+            tip={INDEX.tip}
+            placeholder="None"
+            value={opts.index}
+            options={indices}
+            disabled={running}
+            onBrowse={(file) => setIndices((list) => (list.includes(file) ? list : [...list, file]))}
+            onChange={(index) => patch({ index })}
+          />
+          <Field label={INDEX_RATE.label} tip={INDEX_RATE.tip} extra={<output>{opts.indexRate.toFixed(2)}</output>}>
+            <RangeField
+              value={opts.indexRate}
+              min={INDEX_RATE_RANGE.min}
+              max={INDEX_RATE_RANGE.max}
+              step={INDEX_RATE.step!}
+              disabled={running}
+              onChange={(indexRate) => patch({ indexRate })}
+            />
           </Field>
 
-          <p className="group">Audio</p>
-          <Field id="input-device" label="Microphone" tipLabel="About microphone" tip="The microphone you speak into. System default follows the one Windows is using.">
-            <DeviceSelect id="input-device" devices={devices} channel="inputs" value={opts.inputDevice} disabled={running} onChange={(v) => set("inputDevice", v)} />
+          <h3 className={styles.group}>Audio</h3>
+          <Field label={INPUT_DEVICE.label} tip={INPUT_DEVICE.tip}>
+            <DeviceSelect devices={devices} channel="inputs" value={opts.inputDevice} disabled={running} onChange={(inputDevice) => patch({ inputDevice })} />
           </Field>
-          <Field id="output-device" label="Speakers" tipLabel="About speakers" tip="Where the converted voice plays. System default uses your usual speakers.">
-            <DeviceSelect id="output-device" devices={devices} channel="outputs" value={opts.outputDevice} disabled={running} onChange={(v) => set("outputDevice", v)} />
+          <Field label={OUTPUT_DEVICE.label} tip={OUTPUT_DEVICE.tip}>
+            <DeviceSelect
+              devices={devices}
+              channel="outputs"
+              value={opts.outputDevice}
+              disabled={running}
+              onChange={(outputDevice) => patch({ outputDevice })}
+            />
           </Field>
-          <p className="device-count">{deviceCount}</p>
-          {deviceError && <p className="device-error">{deviceError}</p>}
-          <button type="button" className="text" id="refresh" disabled={running} onClick={refreshDevices}>
+          {scan.kind === "ready" && <p className={styles.deviceCount}>{`${scan.mics} microphones, ${scan.speakers} speakers`}</p>}
+          {scan.kind === "error" && <p className={styles.deviceError}>{scan.message}</p>}
+          <Button variant="text" disabled={running} onClick={() => void refreshDevices()}>
             Refresh devices
-          </button>
+          </Button>
         </div>
-        <button type="button" className="more-toggle" id="more-toggle" aria-expanded={moreOpen} onClick={() => setMoreOpen(true)}>
+        <Button variant="more" aria-expanded={moreOpen} onClick={() => setMoreOpen(true)}>
           More settings
-        </button>
-        <button type="button" className="start" id="start" onClick={goLive}>
+        </Button>
+        <Button variant="start" running={running} onClick={() => void goLive()}>
           {running ? "Stop" : "Go live"}
-        </button>
+        </Button>
       </aside>
 
-      <section className="tape" aria-label="Logs">
-        <div className="tape-bar">
+      <section className={styles.tape} aria-label="Logs">
+        <div className={styles.tapeBar}>
           <h2>Logs</h2>
-          <button type="button" className="text" id="clear-log" onClick={clearLog}>
+          <Button variant="text" className={styles.tapeAction} onClick={clearLog}>
             Clear
-          </button>
+          </Button>
         </div>
-        {logLines.length === 0 && <p className="log-empty">Logs are displayed here.</p>}
-        <pre id="log" aria-live="polite" ref={logRef}>
+        {logLines.length === 0 && <p className={styles.logEmpty}>Logs are displayed here.</p>}
+        <pre id="log" className={styles.log} aria-live="polite" ref={logRef}>
           {logLines.join("\n")}
         </pre>
       </section>
 
-      {moreOpen && <MoreSettings opts={opts} running={running} onChange={set} onClose={() => setMoreOpen(false)} setPitchRange={setPitchRange} />}
-    </>
+      {moreOpen && <MoreSettings opts={opts} running={running} onPatch={patch} onClose={() => setMoreOpen(false)} />}
+    </div>
   );
 }

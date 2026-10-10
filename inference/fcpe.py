@@ -2,14 +2,7 @@
 
 import torch
 
-from tools.cuda_graph import cuda_graph_enabled, run_cuda_graph
-
-
-def _is_directml_device(device):
-    """Return whether *device* is the PrivateUse1 device registered by DirectML."""
-    return getattr(device, "type", None) == "privateuseone" or "privateuseone" in str(
-        device
-    ).lower()
+from inference.cuda_graph import cuda_graph_enabled, device_type, run_cuda_graph
 
 
 class FCPEInfer:
@@ -26,7 +19,7 @@ class FCPEInfer:
         from torchfcpe import spawn_bundled_infer_model
 
         self.device = device
-        self.is_directml = _is_directml_device(device)
+        self.is_directml = device_type(device) == "privateuseone"
         if self.is_directml:
             # Loading a checkpoint directly with map_location=privateuseone is
             # not supported consistently.  Load on CPU, leave wav2mel there,

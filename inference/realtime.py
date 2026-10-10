@@ -20,20 +20,12 @@ import torch
 import torch.nn.functional as F
 from torchaudio.transforms import Resample
 
-from configs.config import infer_device, infer_dtype
+from inference.device import detect_device
+from inference.opts import OPT_SPEC, PitchSettings
 from inference.rtrvc import RVC
 
 
 logger = logging.getLogger(__name__)
-
-
-class DeviceConfig:
-    """The two fields RVC reads from a config object."""
-
-    def __init__(self, device, is_half):
-        """Store the inference device and whether the model runs in float16."""
-        self.device = device
-        self.is_half = is_half
 
 
 class RealtimeConverter:
@@ -52,12 +44,15 @@ class RealtimeConverter:
         crossfade_time=0.05,
         extra_time=2.5,
         rms_mix_rate=0.0,
+        settings=None,
     ):
         """Load the voice model and size the overlap buffers from the block settings."""
         self.f0_method = f0_method
         self.rms_mix_rate = rms_mix_rate
-        self.device = infer_device
-        self.config = DeviceConfig(self.device, infer_dtype == torch.float16)
+        # Detection is expensive and runs once, where the device is first needed,
+        # rather than at import time.
+        self.config = detect_device()
+        self.device = self.config.device
         self.rvc = RVC(
             key,
             formant,
@@ -65,6 +60,7 @@ class RealtimeConverter:
             str(index_path) if index_path else "",
             index_rate,
             self.config,
+            settings=settings,
         )
         self.sample_rate = int(sample_rate or self.rvc.tgt_sr)
         # zc is 10 ms. Every block length is a multiple of that so pitch frames line up.
@@ -235,6 +231,13 @@ def _load_audio(path):
 def _build_converter(args):
     """Build a RealtimeConverter from parsed CLI arguments."""
     index_rate = args.index_rate if args.index else 0.0
+    settings = PitchSettings(
+        f0_min=args.f0_min,
+        f0_max=args.f0_max,
+        rmvpe_threshold=args.rmvpe_threshold,
+        fcpe_threshold=args.fcpe_threshold,
+        index_neighbors=args.index_neighbors,
+    )
     return RealtimeConverter(
         model_path=args.model,
         index_path=args.index,
@@ -247,13 +250,13 @@ def _build_converter(args):
         crossfade_time=args.crossfade_time,
         extra_time=args.extra_time,
         rms_mix_rate=args.rms_mix_rate,
+        settings=settings,
     )
 
 
 def _convert_file(args):
     """Convert --input and write --output."""
     converter = _build_converter(args)
-    _apply_runtime_limits(converter, args)
     audio, sample_rate = _load_audio(args.input)
     if args.input_gain != 1.0:
         audio = audio * args.input_gain
@@ -273,7 +276,6 @@ def _run_live(args):
     output_device = _resolve_device(args.output_device, "output", args.host_api)
     extra_settings = _wasapi_settings(sd, args, input_device, output_device)
     converter = _build_converter(args)
-    _apply_runtime_limits(converter, args)
     input_device_info = sd.query_devices(
         input_device if input_device is not None else sd.default.device[0]
     )
@@ -395,8 +397,13 @@ def _device_label(sd, index, kind):
 
 
 def _parse_latency(value):
-    """Accept low, high, or a number of seconds."""
-    if value is None:
+    """Accept low, high, or a number of seconds.
+
+    An unset latency arrives as an empty string, because that is what the
+    shared option spec declares as the default. It means the same thing as
+    None here: let PortAudio choose. _resolve_device treats "" the same way.
+    """
+    if value is None or value == "":
         return None
     if value.lower() in {"low", "high"}:
         return value.lower()
@@ -424,18 +431,6 @@ def _wasapi_settings(sd, args, input_device, output_device):
     )
 
 
-def _apply_runtime_limits(converter, args):
-    """Copy pitch and index knobs onto the loaded model."""
-    rvc = converter.rvc
-    rvc.f0_min = args.f0_min
-    rvc.f0_max = args.f0_max
-    rvc.f0_mel_min = 1127 * np.log(1 + rvc.f0_min / 700)
-    rvc.f0_mel_max = 1127 * np.log(1 + rvc.f0_max / 700)
-    rvc.rmvpe_threshold = args.rmvpe_threshold
-    rvc.fcpe_threshold = args.fcpe_threshold
-    rvc.index_neighbors = args.index_neighbors
-
-
 def _list_devices():
     """Print the input and output devices PortAudio can see."""
     sd = _import_sounddevice()
@@ -455,46 +450,34 @@ def _list_devices():
         )
 
 
+def _add_spec_arguments(parser):
+    """Add one argparse argument per option described in the shared spec."""
+    for spec in OPT_SPEC.values():
+        kind = spec["kind"]
+        if kind == "bool":
+            parser.add_argument(spec["flag"], action="store_true", default=spec["default"], help=spec["cliHelp"])
+        elif kind == "enum":
+            parser.add_argument(spec["flag"], choices=tuple(spec["choices"]), default=spec["default"], help=spec["cliHelp"])
+        elif kind == "number":
+            parser.add_argument(spec["flag"], type=int if spec.get("integer") else float, default=spec["default"], help=spec["cliHelp"])
+        else:
+            parser.add_argument(spec["flag"], default=spec["default"], help=spec["cliHelp"])
+
+
 def main(argv=None):
     """Parse the real-time CLI and run file mode, live mode, or device listing."""
     parser = argparse.ArgumentParser(description="Real-time RVC voice conversion")
-    parser.add_argument("--model", help="Path to a trained .pth voice model")
-    parser.add_argument("--index", help="Optional .index retrieval file")
     parser.add_argument("--input", help="Input wav/flac/ogg file")
     parser.add_argument("--output", help="Output wav path for file mode")
     parser.add_argument("--live", action="store_true", help="Convert the microphone live")
     parser.add_argument("--list-devices", action="store_true", help="Print audio devices and exit")
-    parser.add_argument("--key", type=int, default=0, help="Pitch shift in semitones")
-    parser.add_argument("--formant", type=float, default=0.0, help="Formant shift in semitones")
-    parser.add_argument("--index-rate", type=float, default=0.75, help="Index blend from 0 to 1")
-    parser.add_argument("--f0", choices=("rmvpe", "fcpe", "pm"), default="rmvpe")
-    parser.add_argument("--sample-rate", type=int, default=0, help="0 uses the model sample rate")
-    parser.add_argument("--block-time", type=float, default=0.25, help="Block size in seconds")
-    parser.add_argument("--crossfade-time", type=float, default=0.05)
-    parser.add_argument("--extra-time", type=float, default=2.5, help="Context kept before each block")
-    parser.add_argument("--rms-mix-rate", type=float, default=0.0, help="1 keeps the converted loudness")
-    parser.add_argument("--input-device", help="Microphone number or name. Default is the system input")
-    parser.add_argument("--output-device", help="Speaker number or name. Default is the system output")
-    parser.add_argument("--host-api", help="Only match devices on this PortAudio host, such as WASAPI")
-    parser.add_argument("--input-channels", type=int, default=1, help="Microphone channels to open, then mix to mono")
-    parser.add_argument("--output-channels", type=int, default=2, help="Speaker channels. Mono audio is copied to each")
-    parser.add_argument("--latency", help="low, high, or seconds. Default lets PortAudio choose")
-    parser.add_argument("--input-gain", type=float, default=1.0, help="Multiply the microphone or file before conversion")
-    parser.add_argument("--output-gain", type=float, default=1.0, help="Multiply the converted audio")
-    parser.add_argument("--no-clip", action="store_true", help="Leave samples outside -1..1 instead of clipping")
-    parser.add_argument("--wasapi-exclusive", action="store_true", help="Open WASAPI devices in exclusive mode")
-    parser.add_argument("--wasapi-auto-convert", action="store_true", help="Let WASAPI resample if the rate differs")
-    parser.add_argument("--f0-min", type=float, default=50.0, help="Lowest pitch treated as voiced, in Hz")
-    parser.add_argument("--f0-max", type=float, default=1100.0, help="Highest pitch, in Hz")
-    parser.add_argument("--rmvpe-threshold", type=float, default=0.03, help="RMVPE voicing threshold")
-    parser.add_argument("--fcpe-threshold", type=float, default=0.006, help="FCPE voicing threshold")
-    parser.add_argument("--index-neighbors", type=int, default=8, help="How many index vectors to blend")
     parser.add_argument(
         "--subtype",
         default="FLOAT",
         choices=("FLOAT", "PCM_16", "PCM_24", "PCM_32"),
         help="Wav sample format for file mode",
     )
+    _add_spec_arguments(parser)
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")

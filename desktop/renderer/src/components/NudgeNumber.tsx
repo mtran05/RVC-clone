@@ -1,5 +1,9 @@
 import { useState } from "react";
 import { legalNumber } from "../lib/opts";
+import { useFieldId } from "./FieldContext";
+import controls from "../styles/controls.module.css";
+import { cx } from "../lib/cx";
+import styles from "./NudgeNumber.module.css";
 
 interface Props {
   id?: string;
@@ -18,10 +22,11 @@ interface Props {
 // is not reset to 0 before the user finishes.
 export default function NudgeNumber({ id, value, step = 1, min, max, disabled, className, ariaLabel, onChange }: Props) {
   const [draft, setDraft] = useState<string | null>(null);
+  const fieldId = useFieldId(id);
 
-  const nudge = (dir: number) => {
+  const nudge = (direction: number) => {
     // legalNumber snaps to the step's precision, avoiding float noise like 1.4000000000000004.
-    const next = legalNumber((Number.isFinite(value) ? value : 0) + dir * step, step, min ?? null, max ?? null, value);
+    const next = legalNumber((Number.isFinite(value) ? value : 0) + direction * step, { step, min, max, fallback: value });
     setDraft(null);
     onChange(next);
   };
@@ -29,22 +34,18 @@ export default function NudgeNumber({ id, value, step = 1, min, max, disabled, c
   // Typed input is only accepted once it is legal: integer counts, step-aligned
   // values, and inside min/max. Falls back to the last good value if invalid.
   const commit = () => {
-    if (draft != null) {
-      const n = Number(draft);
-      const legal = legalNumber(n, step, min ?? null, max ?? null, value);
-      onChange(legal);
-    }
+    if (draft != null) onChange(legalNumber(Number(draft), { step, min, max, fallback: value }));
     setDraft(null);
   };
 
   return (
-    <div className="nudge">
-      <button type="button" className="step" aria-label="Decrease" disabled={disabled} onClick={() => nudge(-1)}>
+    <div className={styles.nudge}>
+      <button type="button" className={styles.step} aria-label="Decrease" disabled={disabled} onClick={() => nudge(-1)}>
         −
       </button>
       <input
-        id={id}
-        className={className ?? "control"}
+        id={fieldId}
+        className={cx(controls.control, styles.input, className)}
         type="number"
         step={step}
         min={min}
@@ -52,22 +53,22 @@ export default function NudgeNumber({ id, value, step = 1, min, max, disabled, c
         value={draft ?? (Number.isFinite(value) ? value : "")}
         aria-label={ariaLabel}
         disabled={disabled}
-        onChange={(e) => {
-          const text = e.target.value;
+        onChange={(event) => {
+          const text = event.target.value;
           setDraft(text);
-          const n = Number(text);
-          if (text.trim() !== "" && Number.isFinite(n)) onChange(n);
+          const parsed = Number(text);
+          if (text.trim() !== "" && Number.isFinite(parsed)) onChange(parsed);
         }}
-        onKeyDown={(e) => {
+        onKeyDown={(event) => {
           // Enter records the typed value (snapped to step, clamped) immediately.
-          if (e.key === "Enter") {
+          if (event.key === "Enter") {
             commit();
-            e.currentTarget.blur();
+            event.currentTarget.blur();
           }
         }}
         onBlur={commit}
       />
-      <button type="button" className="step" aria-label="Increase" disabled={disabled} onClick={() => nudge(1)}>
+      <button type="button" className={styles.step} aria-label="Increase" disabled={disabled} onClick={() => nudge(1)}>
         +
       </button>
     </div>
