@@ -41,6 +41,26 @@ hf download lj1995/VoiceConversionWebUI --revision main --include "pymss_weights
 .venv\Scripts\python.exe -m inference.realtime --model assets/weights/kikiV1.pth --index assets/indices/kikiV1.index --live
 ```
 
+To convert a file instead of the microphone, use the same command with `--input` and `--output`. That is the only file path; there is no separate offline converter.
+
+### Python layout
+
+```
+inference/
+  realtime.py       the entry point: CLI, microphone capture, file conversion
+  rtrvc.py          the streaming model behind it
+  device.py         picks the GPU and the precision
+  opts.py           reads the shared option spec
+  hubert.py         content features          rmvpe.py / fcpe.py   pitch
+  cuda_graph.py     records and replays fixed-shape work
+  module/           the voice network, vendored from upstream RVC
+```
+
+Two things are worth knowing before editing:
+
+- **Importing a module has no side effects.** `device.py` chooses a GPU when you call `detect_device()`, not when you import it, and `inference/__init__.py` imports nothing so that importing the package does not pull in torch.
+- **`inference/module/` and `inference/rmvpe.py` are vendored** from upstream RVC and kept as they are, so they stay easy to re-sync. Everything else is ours.
+
 ## Desktop UI
 
 The live window uses the same options as `inference.realtime --live`. Finish the setup above first. The window does not install Python or the voice models.

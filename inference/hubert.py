@@ -5,14 +5,14 @@ final projection. v2 reads the last hidden state.
 """
 
 import logging
-from functools import lru_cache
+from functools import lru_cache, partial
 from pathlib import Path
 
 import torch
 from torch import nn
 from transformers import AutoFeatureExtractor, HubertModel
 
-from tools.cuda_graph import run_cuda_graph
+from inference.cuda_graph import device_type, run_cuda_graph
 
 
 logger = logging.getLogger(__name__)
@@ -28,14 +28,8 @@ class HubertModelWithFinalProj(HubertModel):
         super().__init__(config)
         self.final_proj = nn.Linear(config.hidden_size, config.classifier_proj_size)
 
+
 HUBERT_MODEL_PATH = (PROJECT_ROOT / "assets" / "hubert_base").resolve()
-
-
-def _device_type(device):
-    """Return cuda, cpu, or privateuseone from a device or a device string."""
-    if isinstance(device, torch.device):
-        return device.type
-    return str(device).split(":", 1)[0]
 
 
 def load_hubert_model(device, is_half=False):
@@ -51,7 +45,7 @@ def load_hubert_model(device, is_half=False):
         "torch_dtype": dtype,
     }
     # DirectML does not implement every SDPA kernel used by Transformers.
-    if _device_type(device) == "privateuseone":
+    if device_type(device) == "privateuseone":
         load_options["attn_implementation"] = "eager"
 
     logger.info(
@@ -76,6 +70,27 @@ def hubert_audio_requires_normalization():
     return bool(feature_extractor.do_normalize)
 
 
+def _v1_features(model, input_values, attention_mask):
+    """Project HuBERT layer 9 into the 256-D v1 features."""
+    outputs = model(
+        input_values=input_values,
+        attention_mask=attention_mask,
+        output_hidden_states=True,
+        return_dict=True,
+    )
+    return model.final_proj(outputs.hidden_states[9])
+
+
+def _v2_features(model, input_values, attention_mask):
+    """Return the last HuBERT layer, which is the 768-D v2 feature."""
+    return model(
+        input_values=input_values,
+        attention_mask=attention_mask,
+        output_hidden_states=False,
+        return_dict=True,
+    ).last_hidden_state
+
+
 def extract_hubert_features(model, source, version, padding_mask=None):
     """Return the RVC v1 (256-D) or v2 (768-D) HuBERT representation.
 
@@ -90,53 +105,14 @@ def extract_hubert_features(model, source, version, padding_mask=None):
     if padding_mask is not None and bool(torch.any(padding_mask).item()):
         attention_mask = (~padding_mask.bool()).long()
 
-    if version == "v1":
-        if attention_mask is None:
-            def forward(input_values):
-                """Project HuBERT layer 9 into the 256-D v1 features."""
-                outputs = model(
-                    input_values=input_values,
-                    attention_mask=None,
-                    output_hidden_states=True,
-                    return_dict=True,
-                )
-                return model.final_proj(outputs.hidden_states[9])
+    project = _v1_features if version == "v1" else _v2_features
 
-            return run_cuda_graph(model, "hubert-v1-no-mask", forward, source)
-
-        def forward(input_values, mask):
-            """Project HuBERT layer 9, ignoring padded frames."""
-            outputs = model(
-                input_values=input_values,
-                attention_mask=mask,
-                output_hidden_states=True,
-                return_dict=True,
-            )
-            return model.final_proj(outputs.hidden_states[9])
-
-        return run_cuda_graph(
-            model, "hubert-v1-mask", forward, source, attention_mask
-        )
-
+    # The graph cache keys on the namespace, so the masked and unmasked paths
+    # stay separate names. Passing None through the graph is not possible: the
+    # cache inspects every input's shape.
     if attention_mask is None:
-        def forward(input_values):
-            """Return the last HuBERT layer, which is the 768-D v2 feature."""
-            return model(
-                input_values=input_values,
-                attention_mask=None,
-                output_hidden_states=False,
-                return_dict=True,
-            ).last_hidden_state
+        forward = partial(project, model, attention_mask=None)
+        return run_cuda_graph(model, f"hubert-{version}-no-mask", forward, source)
 
-        return run_cuda_graph(model, "hubert-v2-no-mask", forward, source)
-
-    def forward(input_values, mask):
-        """Return the last HuBERT layer, ignoring padded frames."""
-        return model(
-            input_values=input_values,
-            attention_mask=mask,
-            output_hidden_states=False,
-            return_dict=True,
-        ).last_hidden_state
-
-    return run_cuda_graph(model, "hubert-v2-mask", forward, source, attention_mask)
+    forward = partial(project, model)
+    return run_cuda_graph(model, f"hubert-{version}-mask", forward, source, attention_mask)

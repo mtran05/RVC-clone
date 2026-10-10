@@ -3,6 +3,11 @@
 HuBERT, pitch models, and the synthesizer call run_cuda_graph. The first
 call with a given shape is recorded. Later calls copy new audio into the
 recorded buffers and replay the graph.
+
+This also owns device_type, the one place that turns a device or device string
+into its backend name. Everything else in the package asks here rather than
+writing its own check, which is how three slightly different copies of that
+check ended up disagreeing about case.
 """
 
 import logging
@@ -22,7 +27,7 @@ _probe_lock = threading.Lock()
 _probe_result = None
 
 
-def _device_type(device):
+def device_type(device):
     """Return cuda, cpu, or privateuseone from a device or a device string."""
     if isinstance(device, torch.device):
         return device.type
@@ -52,7 +57,7 @@ def _clone_output(value):
 
 def detect_cuda_graph_support(device):
     """Return whether this GPU can capture and replay a tiny CUDA graph."""
-    if _device_type(device) != "cuda" or not torch.cuda.is_available():
+    if device_type(device) != "cuda" or not torch.cuda.is_available():
         return False
     if not hasattr(torch.cuda, "CUDAGraph") or not hasattr(torch.cuda, "graph"):
         return False
@@ -92,7 +97,7 @@ def configure_cuda_graph(device):
     if explicit in {"0", "1"}:
         if explicit == "0":
             return False
-        if _device_type(device) != "cuda":
+        if device_type(device) != "cuda":
             os.environ[ENV_NAME] = "0"
             return False
     with _probe_lock:
@@ -106,7 +111,7 @@ def cuda_graph_enabled(device):
     """Return whether replay is allowed for this device right now."""
     return (
         os.environ.get(ENV_NAME) == "1"
-        and _device_type(device) == "cuda"
+        and device_type(device) == "cuda"
         and torch.cuda.is_available()
     )
 

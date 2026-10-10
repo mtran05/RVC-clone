@@ -11,7 +11,6 @@ Live mode plays the microphone through the default speakers:
 """
 
 import argparse
-import json
 import logging
 from pathlib import Path
 
@@ -21,25 +20,12 @@ import torch
 import torch.nn.functional as F
 from torchaudio.transforms import Resample
 
-from configs.config import infer_device, infer_dtype
+from inference.device import detect_device
+from inference.opts import OPT_SPEC, PitchSettings
 from inference.rtrvc import RVC
 
 
 logger = logging.getLogger(__name__)
-
-# Every option's flag, type, choices, and starting value live in one file shared
-# with desktop/args.js and the desktop app's UI, so the three cannot drift.
-OPT_SPEC_PATH = Path(__file__).resolve().parent.parent / "desktop" / "shared" / "opts-spec.json"
-OPT_SPEC = json.loads(OPT_SPEC_PATH.read_text(encoding="utf-8"))["options"]
-
-
-class DeviceConfig:
-    """The two fields RVC reads from a config object."""
-
-    def __init__(self, device, is_half):
-        """Store the inference device and whether the model runs in float16."""
-        self.device = device
-        self.is_half = is_half
 
 
 class RealtimeConverter:
@@ -58,12 +44,15 @@ class RealtimeConverter:
         crossfade_time=0.05,
         extra_time=2.5,
         rms_mix_rate=0.0,
+        settings=None,
     ):
         """Load the voice model and size the overlap buffers from the block settings."""
         self.f0_method = f0_method
         self.rms_mix_rate = rms_mix_rate
-        self.device = infer_device
-        self.config = DeviceConfig(self.device, infer_dtype == torch.float16)
+        # Detection is expensive and runs once, where the device is first needed,
+        # rather than at import time.
+        self.config = detect_device()
+        self.device = self.config.device
         self.rvc = RVC(
             key,
             formant,
@@ -71,6 +60,7 @@ class RealtimeConverter:
             str(index_path) if index_path else "",
             index_rate,
             self.config,
+            settings=settings,
         )
         self.sample_rate = int(sample_rate or self.rvc.tgt_sr)
         # zc is 10 ms. Every block length is a multiple of that so pitch frames line up.
@@ -241,6 +231,13 @@ def _load_audio(path):
 def _build_converter(args):
     """Build a RealtimeConverter from parsed CLI arguments."""
     index_rate = args.index_rate if args.index else 0.0
+    settings = PitchSettings(
+        f0_min=args.f0_min,
+        f0_max=args.f0_max,
+        rmvpe_threshold=args.rmvpe_threshold,
+        fcpe_threshold=args.fcpe_threshold,
+        index_neighbors=args.index_neighbors,
+    )
     return RealtimeConverter(
         model_path=args.model,
         index_path=args.index,
@@ -253,13 +250,13 @@ def _build_converter(args):
         crossfade_time=args.crossfade_time,
         extra_time=args.extra_time,
         rms_mix_rate=args.rms_mix_rate,
+        settings=settings,
     )
 
 
 def _convert_file(args):
     """Convert --input and write --output."""
     converter = _build_converter(args)
-    _apply_runtime_limits(converter, args)
     audio, sample_rate = _load_audio(args.input)
     if args.input_gain != 1.0:
         audio = audio * args.input_gain
@@ -279,7 +276,6 @@ def _run_live(args):
     output_device = _resolve_device(args.output_device, "output", args.host_api)
     extra_settings = _wasapi_settings(sd, args, input_device, output_device)
     converter = _build_converter(args)
-    _apply_runtime_limits(converter, args)
     input_device_info = sd.query_devices(
         input_device if input_device is not None else sd.default.device[0]
     )
@@ -401,8 +397,13 @@ def _device_label(sd, index, kind):
 
 
 def _parse_latency(value):
-    """Accept low, high, or a number of seconds."""
-    if value is None:
+    """Accept low, high, or a number of seconds.
+
+    An unset latency arrives as an empty string, because that is what the
+    shared option spec declares as the default. It means the same thing as
+    None here: let PortAudio choose. _resolve_device treats "" the same way.
+    """
+    if value is None or value == "":
         return None
     if value.lower() in {"low", "high"}:
         return value.lower()
@@ -428,18 +429,6 @@ def _wasapi_settings(sd, args, input_device, output_device):
         exclusive=args.wasapi_exclusive,
         auto_convert=args.wasapi_auto_convert,
     )
-
-
-def _apply_runtime_limits(converter, args):
-    """Copy pitch and index knobs onto the loaded model."""
-    rvc = converter.rvc
-    rvc.f0_min = args.f0_min
-    rvc.f0_max = args.f0_max
-    rvc.f0_mel_min = 1127 * np.log(1 + rvc.f0_min / 700)
-    rvc.f0_mel_max = 1127 * np.log(1 + rvc.f0_max / 700)
-    rvc.rmvpe_threshold = args.rmvpe_threshold
-    rvc.fcpe_threshold = args.fcpe_threshold
-    rvc.index_neighbors = args.index_neighbors
 
 
 def _list_devices():
