@@ -83,4 +83,13 @@ describe("sanitizeOpts", () => {
     sanitizeOpts(original, "f0Min");
     expect(original).toEqual(snapshot);
   });
+
+  it("does not mutate the shared defaults", () => {
+    // defaultOpts is the app's starting point, built from the shared spec. If
+    // sanitizeOpts wrote through to it, one session's settings would become
+    // everyone's defaults for the next launch.
+    const snapshot = JSON.stringify(defaultOpts);
+    sanitizeOpts({ ...defaultOpts, f0Min: 900, latency: "fast" }, "f0Min");
+    expect(JSON.stringify(defaultOpts)).toBe(snapshot);
+  });
 });
