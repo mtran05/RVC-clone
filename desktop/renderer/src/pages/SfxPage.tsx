@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import { useState, useEffect, useRef, ChangeEvent } from "react";
 import { bridge, Device } from "../lib/bridge";
 import { useSession } from "../lib/session";
@@ -412,4 +413,10 @@ export default function SfxPage() {
       </section>
     </>
   );
+=======
+import PlaceholderPage from "../components/PlaceholderPage";
+
+export default function SfxPage() {
+  return <PlaceholderPage title="SFX" />;
+>>>>>>> main
 }

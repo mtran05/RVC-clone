@@ -1,0 +1,300 @@
+{
+  "$comment": [
+    "Single source of truth for every inference option. Read by:",
+    "  desktop/renderer/src/lib/specs.ts      -> defaults, field metadata, tune grids",
+    "  desktop/args.js                         -> CLI flag list for buildArgs",
+    "  inference/realtime.py                   -> argparse type/default/choices/help",
+    "Adding an option here should mean editing nothing else.",
+    "label/tip are the desktop app's wording; cliHelp is the terminal's. They",
+    "are allowed to read differently because they are different audiences."
+  ],
+  "options": {
+    "model": {
+      "flag": "--model",
+      "kind": "path",
+      "default": "",
+      "section": "voice",
+      "label": "Model",
+      "tip": "The voice you want to sound like. Pick one before you go live.",
+      "cliHelp": "Path to a trained .pth voice model"
+    },
+    "index": {
+      "flag": "--index",
+      "kind": "path",
+      "default": "",
+      "section": "voice",
+      "label": "Index",
+      "tip": "An optional file that pulls the result closer to that voice. None turns this off.",
+      "cliHelp": "Optional .index retrieval file"
+    },
+    "indexRate": {
+      "flag": "--index-rate",
+      "kind": "number",
+      "default": 0.75,
+      "step": 0.01,
+      "min": 0,
+      "max": 1,
+      "section": "voice",
+      "label": "Index rate",
+      "tip": "How much the index file is used. 0 uses only the voice. 1 leans on the index as much as it can.",
+      "cliHelp": "Index blend from 0 to 1"
+    },
+    "key": {
+      "flag": "--key",
+      "kind": "number",
+      "integer": true,
+      "default": 0,
+      "step": 1,
+      "min": -24,
+      "max": 24,
+      "section": "pitch",
+      "label": "Pitch",
+      "tip": "Moves your voice up or down. A higher number sounds higher. A lower number sounds lower. It stops at two octaves.",
+      "cliHelp": "Pitch shift in semitones"
+    },
+    "formant": {
+      "flag": "--formant",
+      "kind": "number",
+      "default": 0,
+      "step": 0.1,
+      "section": "pitch",
+      "label": "Formant",
+      "tip": "Makes the voice brighter or darker without moving the note as much. 0 leaves the tone alone.",
+      "cliHelp": "Formant shift in semitones"
+    },
+    "f0": {
+      "flag": "--f0",
+      "kind": "enum",
+      "default": "rmvpe",
+      "choices": ["rmvpe", "fcpe", "pm"],
+      "section": "pitch",
+      "label": "Pitch tracker",
+      "tip": "How the app hears the note you are singing. RMVPE is the usual choice. FCPE uses less of the computer. PM is the older method.",
+      "cliHelp": "Pitch tracker to use"
+    },
+    "f0Min": {
+      "flag": "--f0-min",
+      "kind": "number",
+      "default": 50,
+      "step": 1,
+      "min": 1,
+      "section": "pitch",
+      "label": "Lowest pitch (Hz)",
+      "tip": "The lowest tone counted as a voice. Anything lower is ignored.",
+      "cliHelp": "Lowest pitch treated as voiced, in Hz"
+    },
+    "f0Max": {
+      "flag": "--f0-max",
+      "kind": "number",
+      "default": 1100,
+      "step": 1,
+      "min": 1,
+      "section": "pitch",
+      "label": "Highest pitch (Hz)",
+      "tip": "The highest tone counted as a voice. Keep it above the lowest pitch.",
+      "cliHelp": "Highest pitch, in Hz"
+    },
+    "rmvpeThreshold": {
+      "flag": "--rmvpe-threshold",
+      "kind": "number",
+      "default": 0.03,
+      "step": 0.001,
+      "min": 0,
+      "section": "pitch",
+      "label": "RMVPE threshold",
+      "tip": "How sure the usual pitch method must be before it counts a note. A higher number ignores more noise.",
+      "cliHelp": "RMVPE voicing threshold"
+    },
+    "fcpeThreshold": {
+      "flag": "--fcpe-threshold",
+      "kind": "number",
+      "default": 0.006,
+      "step": 0.001,
+      "min": 0,
+      "section": "pitch",
+      "label": "FCPE threshold",
+      "tip": "How sure the lighter pitch method must be before it counts a note. A higher number ignores more noise.",
+      "cliHelp": "FCPE voicing threshold"
+    },
+    "rmsMixRate": {
+      "flag": "--rms-mix-rate",
+      "kind": "number",
+      "default": 0,
+      "step": 0.01,
+      "min": 0,
+      "max": 1,
+      "section": "gain",
+      "label": "Loudness mix",
+      "tip": "0 follows how loud you are. 1 keeps the loudness of the chosen voice.",
+      "cliHelp": "1 keeps the converted loudness"
+    },
+    "inputGain": {
+      "flag": "--input-gain",
+      "kind": "number",
+      "default": 1,
+      "step": 0.1,
+      "min": 0,
+      "section": "gain",
+      "label": "Mic gain",
+      "tip": "Turns the microphone up or down before conversion. 1 leaves it as it is.",
+      "cliHelp": "Multiply the microphone or file before conversion"
+    },
+    "outputGain": {
+      "flag": "--output-gain",
+      "kind": "number",
+      "default": 1,
+      "step": 0.1,
+      "min": 0,
+      "section": "gain",
+      "label": "Speaker gain",
+      "tip": "Turns the converted voice up or down. 1 leaves it as it is.",
+      "cliHelp": "Multiply the converted audio"
+    },
+    "noClip": {
+      "flag": "--no-clip",
+      "kind": "bool",
+      "default": false,
+      "section": "gain",
+      "label": "Don't clip",
+      "tip": "Off keeps loud peaks inside a safe range. On leaves those peaks alone.",
+      "cliHelp": "Leave samples outside -1..1 instead of clipping"
+    },
+    "blockTime": {
+      "flag": "--block-time",
+      "kind": "number",
+      "default": 0.25,
+      "step": 0.01,
+      "min": 0.01,
+      "section": "timing",
+      "label": "Block (seconds)",
+      "tip": "How much of your voice is converted at once. A smaller number answers faster and works the computer harder.",
+      "cliHelp": "Block size in seconds"
+    },
+    "crossfadeTime": {
+      "flag": "--crossfade-time",
+      "kind": "number",
+      "default": 0.05,
+      "step": 0.01,
+      "min": 0,
+      "section": "timing",
+      "label": "Crossfade (seconds)",
+      "tip": "A short blend between each piece of audio so you do not hear clicks.",
+      "cliHelp": "Crossfade between blocks, in seconds"
+    },
+    "extraTime": {
+      "flag": "--extra-time",
+      "kind": "number",
+      "default": 2.5,
+      "step": 0.1,
+      "min": 0,
+      "section": "timing",
+      "label": "Context (seconds)",
+      "tip": "How much of what you just said is kept in mind. More of it can sound steadier.",
+      "cliHelp": "Context kept before each block"
+    },
+    "indexNeighbors": {
+      "flag": "--index-neighbors",
+      "kind": "number",
+      "integer": true,
+      "default": 8,
+      "step": 1,
+      "min": 1,
+      "section": "index",
+      "label": "Index neighbors",
+      "tip": "How many close matches from the index file are mixed together. Use a whole number, at least 1.",
+      "cliHelp": "How many index vectors to blend"
+    },
+    "sampleRate": {
+      "flag": "--sample-rate",
+      "kind": "number",
+      "integer": true,
+      "default": 0,
+      "step": 1,
+      "min": 0,
+      "section": "device",
+      "label": "Sample rate",
+      "tip": "How many samples play each second. 0 uses the voice model's own rate. Use a whole number.",
+      "cliHelp": "0 uses the model sample rate"
+    },
+    "inputChannels": {
+      "flag": "--input-channels",
+      "kind": "number",
+      "integer": true,
+      "default": 1,
+      "step": 1,
+      "min": 1,
+      "section": "device",
+      "label": "Mic channels",
+      "tip": "How many microphone channels to open. They are mixed into one voice. Use a whole number, at least 1.",
+      "cliHelp": "Microphone channels to open, then mix to mono"
+    },
+    "outputChannels": {
+      "flag": "--output-channels",
+      "kind": "number",
+      "integer": true,
+      "default": 2,
+      "step": 1,
+      "min": 1,
+      "section": "device",
+      "label": "Speaker channels",
+      "tip": "How many speaker channels to play. The voice is copied onto each one. Use a whole number, at least 1.",
+      "cliHelp": "Speaker channels. Mono audio is copied to each"
+    },
+    "latency": {
+      "flag": "--latency",
+      "kind": "string",
+      "default": "",
+      "section": "device",
+      "label": "Latency",
+      "tip": "How long the sound card waits. Type low, high, or a number of seconds. Leave it empty to let the computer choose. This is separate from block time.",
+      "placeholder": "low, high, or seconds",
+      "cliHelp": "low, high, or seconds. Default lets PortAudio choose"
+    },
+    "inputDevice": {
+      "flag": "--input-device",
+      "kind": "string",
+      "default": "",
+      "section": "device",
+      "label": "Microphone",
+      "tip": "The microphone you speak into. System default follows the one Windows is using.",
+      "cliHelp": "Microphone number or name. Default is the system input"
+    },
+    "outputDevice": {
+      "flag": "--output-device",
+      "kind": "string",
+      "default": "",
+      "section": "device",
+      "label": "Speakers",
+      "tip": "Where the converted voice plays. System default uses your usual speakers.",
+      "cliHelp": "Speaker number or name. Default is the system output"
+    },
+    "hostApi": {
+      "flag": "--host-api",
+      "kind": "string",
+      "default": "",
+      "section": "device",
+      "label": "Host API",
+      "tip": "Show devices from only one sound system, such as WASAPI. Leave it empty to allow every system.",
+      "placeholder": "WASAPI",
+      "cliHelp": "Only match devices on this PortAudio host, such as WASAPI"
+    },
+    "wasapiExclusive": {
+      "flag": "--wasapi-exclusive",
+      "kind": "bool",
+      "default": false,
+      "section": "device",
+      "label": "WASAPI exclusive",
+      "tip": "Takes over the WASAPI microphone and speakers so other apps cannot share them. Both devices must be WASAPI.",
+      "cliHelp": "Open WASAPI devices in exclusive mode"
+    },
+    "wasapiAutoConvert": {
+      "flag": "--wasapi-auto-convert",
+      "kind": "bool",
+      "default": false,
+      "section": "device",
+      "label": "WASAPI resample",
+      "tip": "Lets WASAPI change the rate when a device does not match. Both the microphone and speakers must be WASAPI.",
+      "cliHelp": "Let WASAPI resample if the rate differs"
+    }
+  }
+}

@@ -1,0 +1,9 @@
+.row {
+  display: flex;
+  gap: 8px;
+}
+
+.row > select {
+  flex: 1;
+  min-width: 0;
+}

@@ -1,0 +1,51 @@
+.overlay {
+  position: fixed;
+  z-index: 20;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  background: rgba(8, 10, 12, 0.72);
+}
+
+.sheet {
+  width: min(960px, 100%);
+  max-height: min(82vh, 760px);
+  overflow: auto;
+  padding: 18px 22px 22px;
+  background: var(--bezel);
+  border: 1px solid var(--hair);
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.bar h2 {
+  font-family: var(--display);
+  font-size: 26px;
+  font-weight: 400;
+  color: var(--ink);
+}
+
+/* Prefixed with .bar so it outranks the shared `.text` button margin no matter
+   which stylesheet is bundled first. */
+.bar .close {
+  align-self: center;
+  margin: 0;
+}
+
+@media (max-width: 760px) {
+  .overlay {
+    padding: 12px;
+  }
+
+  .sheet {
+    max-height: calc(100vh - 24px);
+    padding: 14px;
+  }
+}

@@ -2,6 +2,7 @@
 RVC WebUI/
 assets/
 graphify-out/
+node_modules/
 desktop/node_modules/
 desktop/dist/
 **/__pycache__/

@@ -1,0 +1,48 @@
+.wrap {
+  /* The wrapper is layout-transparent so the button sits in the label row's
+     flex flow without becoming a flex item of its own. */
+  display: contents;
+}
+
+.button {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--hair);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--dim);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.button:hover {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+
+.button[aria-expanded="true"] {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+
+.pop {
+  position: absolute;
+  z-index: 30;
+  width: max-content;
+  max-width: 260px;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--hair);
+  border-radius: 2px;
+  background: var(--well);
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+/* Anchored to the button by TipButton, in viewport coordinates. */
+.floating {
+  position: fixed;
+}

@@ -1,0 +1,10 @@
+.more {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.more h3 {
+  margin: 0 0 6px;
+  color: var(--ink);
+}

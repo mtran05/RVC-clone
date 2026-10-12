@@ -1,0 +1,26 @@
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.check input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--filament);
+}
+
+.check:has(input:disabled) {
+  opacity: 0.45;
+  cursor: default;
+}

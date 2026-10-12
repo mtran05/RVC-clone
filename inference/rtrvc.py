@@ -15,11 +15,16 @@ import torch
 import torch.nn.functional as F
 from torchaudio.transforms import Resample
 
+from inference.cuda_graph import run_cuda_graph
 from inference.hubert import extract_hubert_features, load_hubert_model
-from tools.cuda_graph import run_cuda_graph
+from inference.opts import PitchSettings
 
 
 logger = logging.getLogger(__name__)
+
+# Feature extractors and pitch models all read 16 kHz audio.
+SAMPLE_RATE_16K = 16000
+RMVPE_MODEL_PATH = "assets/rmvpe/rmvpe.pt"
 
 
 def get_synthesizer(pth_path, device=torch.device("cpu")):
@@ -70,18 +75,25 @@ class RVC:
         index_rate,
         config,
         last_rvc=None,
+        settings=None,
     ):
-        """Load HuBERT, the voice model, and the index unless last_rvc already has them."""
+        """Load HuBERT, the voice model, and the index unless last_rvc already has them.
+
+        settings carries the pitch bounds and detector thresholds. They arrive
+        as a value rather than being written onto the instance afterwards, so
+        the mel bounds below cannot disagree with the bounds they came from.
+        """
         try:
             self.config = config
             self.device = config.device
             self.f0_up_key = key
             self.formant_shift = formant
-            self.f0_min = 50
-            self.f0_max = 1100
-            self.rmvpe_threshold = 0.03
-            self.fcpe_threshold = 0.006
-            self.index_neighbors = 8
+            settings = settings or PitchSettings.defaults()
+            self.f0_min = settings.f0_min
+            self.f0_max = settings.f0_max
+            self.rmvpe_threshold = settings.rmvpe_threshold
+            self.fcpe_threshold = settings.fcpe_threshold
+            self.index_neighbors = settings.index_neighbors
             self.f0_mel_min = 1127 * np.log(1 + self.f0_min / 700)
             self.f0_mel_max = 1127 * np.log(1 + self.f0_max / 700)
             self.is_half = config.is_half
@@ -201,7 +213,7 @@ class RVC:
 
             logger.info("Loading RMVPE model")
             self.model_rmvpe = RMVPE(
-                "assets/rmvpe/rmvpe.pt",
+                RMVPE_MODEL_PATH,
                 is_half=self.is_half,
                 device=self.device,
             )

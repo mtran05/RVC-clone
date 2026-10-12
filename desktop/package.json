@@ -3,17 +3,36 @@
   "version": "1.0.0",
   "private": true,
   "main": "main.js",
+  "workspaces": [
+    "renderer"
+  ],
   "scripts": {
     "prestart": "node ensure-electron.js",
     "start": "electron .",
-    "check": "node args.js && node repo.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint . --max-warnings 0",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "npm --prefix renderer run typecheck",
+    "verify": "npm run format:check && npm run lint && npm run typecheck && npm test",
     "renderer:build": "npm --prefix renderer run build",
     "dev": "npm --prefix renderer run dev",
-    "pack": "npm run renderer:build && electron-builder --win portable"
+    "pack": "npm run verify && npm run renderer:build && electron-builder --win portable"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@testing-library/react": "^16.3.3",
     "electron": "^33.4.11",
-    "electron-builder": "^25.1.8"
+    "electron-builder": "^25.1.8",
+    "eslint": "^9.39.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "jsdom": "^30.1.2",
+    "prettier": "^3.9.10",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "typescript-eslint": "^8.71.1",
+    "vitest": "^5.0.3"
   },
   "build": {
     "appId": "local.overtone",
@@ -28,6 +47,8 @@
       "preload.js",
       "args.js",
       "repo.js",
+      "main/**/*",
+      "shared/**/*",
       "renderer/dist/**/*",
       "logo.svg",
       "logo.png",
