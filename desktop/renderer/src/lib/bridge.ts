@@ -23,7 +23,7 @@ export interface ExitInfo {
 
 export interface RvcBridge {
   assets: () => Promise<Assets>;
-  browse: (kind: "model" | "index") => Promise<string | null>;
+  browse: (kind: "model" | "index" | "audio") => Promise<string | null>;
   devices: () => Promise<{ ok: true; devices: Device[] } | { ok: false; error: string }>;
   start: (opts: InferenceOpts) => Promise<{ ok: true } | { ok: false; error: string }>;
   stop: () => Promise<{ ok: true }>;
