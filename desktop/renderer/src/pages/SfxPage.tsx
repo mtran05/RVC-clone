@@ -13,10 +13,9 @@ export interface SfxItem {
   keybind?: string;
   volume: number;
 }
-
+//variable to store key binds to remember them
 const STORAGE_KEY = "overtone_bundled_sfx_keybinds";
 
-// Clean up file names for display (e.g., "airhorn_sound.mp3" -> "Airhorn Sound")
 function formatDisplayName(pathStr: string): string {
   const fileName =
     pathStr
@@ -26,10 +25,10 @@ function formatDisplayName(pathStr: string): string {
   return fileName.replace(/[-_]/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-// Automatically import all audio files from src/assets/sounds/ at build/runtime
+//checks for sounds in the assets/sounds folder and loads them into the project
 const loadedAudioModules = import.meta.glob<string>("../assets/sounds/*.{mp3,wav,ogg,m4a,flac,aac}", { eager: true, import: "default" });
 
-// Map imported files into SfxItem objects
+//store the loaded sounds into a constant array of SfxItem objects
 const PROJECT_SOUNDS: SfxItem[] = Object.entries(loadedAudioModules).map(([filePath, resolvedUrl]) => ({
   id: filePath,
   name: formatDisplayName(filePath),
@@ -37,12 +36,12 @@ const PROJECT_SOUNDS: SfxItem[] = Object.entries(loadedAudioModules).map(([fileP
   volume: 0.8,
 }));
 
+// Main SFX Page Component
 export default function SfxPage() {
   const session = useSession();
   const logLines = session?.logLines ?? [];
   const clearLog = session?.clearLog;
 
-  // Sound list initialized with bundled project sounds and restored keybinds
   const [sfxList, setSfxList] = useState<SfxItem[]>(() => {
     try {
       const savedKeybinds = localStorage.getItem(STORAGE_KEY);
@@ -57,6 +56,7 @@ export default function SfxPage() {
     }
   });
 
+  // state variables for active playing sounds, master volume, search term, selected output device, and key listening state
   const [activePlaying, setActivePlaying] = useState<Record<string, boolean>>({});
   const [masterVolume, setMasterVolume] = useState<number>(0.8);
   const [search, setSearch] = useState<string>("");
@@ -64,10 +64,11 @@ export default function SfxPage() {
   const [listeningForKey, setListeningForKey] = useState<string | null>(null);
   const [audioOutputs, setAudioOutputs] = useState<MediaDeviceInfo[]>([]);
 
-  const audioInstances = useRef<Record<string, HTMLAudioElement[]>>({});
+  const allRunningAudios = useRef<Set<HTMLAudioElement>>(new Set());
+  const soundAudiosMap = useRef<Map<string, Set<HTMLAudioElement>>>(new Map());
   const logRef = useRef<HTMLPreElement>(null);
 
-  // Fetch available Web Audio output devices
+  // Function to refresh the list of audio output devices
   const refreshDevices = async () => {
     try {
       if (navigator.mediaDevices?.getUserMedia) {
@@ -83,6 +84,7 @@ export default function SfxPage() {
     }
   };
 
+  // Effect to refresh audio devices on mount and listen for device changes
   useEffect(() => {
     refreshDevices();
     navigator.mediaDevices?.addEventListener("devicechange", refreshDevices);
@@ -91,7 +93,7 @@ export default function SfxPage() {
     };
   }, []);
 
-  // Save keybind configuration changes to localStorage
+  // Effect to save keybinds to localStorage whenever the sfxList changes
   useEffect(() => {
     try {
       const keybindMap: Record<string, string> = {};
@@ -104,7 +106,118 @@ export default function SfxPage() {
     }
   }, [sfxList]);
 
-  // Keybind listener
+  //stops a specific sound by its ID
+  const stopSound = (id: string) => {
+    const soundSet = soundAudiosMap.current.get(id);
+    if (soundSet) {
+      soundSet.forEach((audio) => {
+        audio.pause();
+        audio.currentTime = 0;
+        allRunningAudios.current.delete(audio);
+      });
+      soundAudiosMap.current.delete(id);
+    }
+    setActivePlaying((prev) => ({ ...prev, [id]: false }));
+  };
+
+  //stops all playing sounds
+  const stopAll = () => {
+    allRunningAudios.current.forEach((audio) => {
+      audio.pause();
+      audio.currentTime = 0;
+    });
+    allRunningAudios.current.clear();
+    soundAudiosMap.current.clear();
+    setActivePlaying({});
+  };
+
+  // Function to toggle play/stop for a specific sound by its ID
+  const togglePlay = async (id: string) => {
+    const item = sfxList.find((s) => s.id === id);
+    if (!item || !item.path) return;
+
+    //if the sound is already playing, stop it other wise, play it
+    const activeInstances = soundAudiosMap.current.get(id);
+    if (activeInstances && activeInstances.size > 0) {
+      stopSound(id);
+      return;
+    }
+
+    //play the sound and handle volume, output device, and cleanup
+    try {
+      const calcVolume = Math.max(0, Math.min(1, item.volume * masterVolume));
+      const instances: HTMLAudioElement[] = [];
+
+      // Create and play the local audio instance
+      const localAudio = new Audio(item.path);
+      localAudio.volume = calcVolume;
+      instances.push(localAudio);
+
+      //
+      if (sfxOutput) {
+        const streamAudio = new Audio(item.path);
+        streamAudio.volume = calcVolume;
+
+        // Attempt to set the sink ID for the secondary output device if supported
+        if ("setSinkId" in streamAudio && typeof (streamAudio as any).setSinkId === "function") {
+          try {
+            await (streamAudio as any).setSinkId(sfxOutput);
+          } catch (err) {
+            console.warn("Failed to attach audio sink ID:", err);
+          }
+        }
+        streamAudio.play().catch((e) => console.error("Secondary audio stream failed:", e));
+        instances.push(streamAudio);
+      }
+
+      //store audio instances in a map
+      if (!soundAudiosMap.current.has(id)) {
+        soundAudiosMap.current.set(id, new Set());
+      }
+      //store the audio instances in a set for this sound ID
+      const soundSet = soundAudiosMap.current.get(id)!;
+
+      instances.forEach((a) => {
+        allRunningAudios.current.add(a);
+        soundSet.add(a);
+      });
+
+      //stops and removes audio instances when they finish playing or encounter an error
+      const cleanup = () => {
+        instances.forEach((a) => {
+          a.pause();
+          allRunningAudios.current.delete(a);
+          soundSet.delete(a);
+        });
+        if (soundSet.size === 0) {
+          soundAudiosMap.current.delete(id);
+          setActivePlaying((prev) => ({ ...prev, [id]: false }));
+        }
+      };
+
+      // Attach event listeners for cleanup
+      localAudio.onended = cleanup;
+      localAudio.onerror = (e) => {
+        console.error(`Audio error for file "${item.name}":`, e);
+        cleanup();
+      };
+
+      // Attempt to play the local audio and handle any promise rejections
+      const playPromise = localAudio.play();
+      if (playPromise !== undefined) {
+        playPromise.catch((err) => {
+          console.error("Local audio playback failed:", err);
+          cleanup();
+        });
+      }
+
+      setActivePlaying((prev) => ({ ...prev, [id]: true }));
+    } catch (err) {
+      console.error("Audio initialization error:", err);
+    }
+  };
+
+  //if key is pressed, trigger the sound affect.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
@@ -128,107 +241,28 @@ export default function SfxPage() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [sfxList, listeningForKey]);
+  }, [sfxList, listeningForKey, masterVolume, sfxOutput]);
 
-  const togglePlay = async (id: string) => {
-    const item = sfxList.find((s) => s.id === id);
-    if (!item || !item.path) return;
-
-    if (activePlaying[id]) {
-      const activeAudios = audioInstances.current[id];
-      if (activeAudios) {
-        activeAudios.forEach((audio) => {
-          audio.pause();
-          audio.currentTime = 0;
-        });
-      }
-      delete audioInstances.current[id];
-      setActivePlaying((prev) => ({ ...prev, [id]: false }));
-    } else {
-      try {
-        const calcVolume = Math.max(0, Math.min(1, item.volume * masterVolume));
-        const instances: HTMLAudioElement[] = [];
-
-        // 1. Play locally (Headphones)
-        const localAudio = new Audio(item.path);
-        localAudio.volume = calcVolume;
-        instances.push(localAudio);
-
-        // 2. Secondary Output (Virtual Cable / Stream Target)
-        if (sfxOutput) {
-          const streamAudio = new Audio(item.path);
-          streamAudio.volume = calcVolume;
-
-          if ("setSinkId" in streamAudio && typeof (streamAudio as any).setSinkId === "function") {
-            try {
-              await (streamAudio as any).setSinkId(sfxOutput);
-            } catch (err) {
-              console.warn("Failed to attach audio sink ID:", err);
-            }
-          }
-          streamAudio.play().catch((e) => console.error("Secondary audio stream failed:", e));
-          instances.push(streamAudio);
-        }
-
-        const cleanup = () => {
-          instances.forEach((a) => a.pause());
-          delete audioInstances.current[id];
-          setActivePlaying((prev) => ({ ...prev, [id]: false }));
-        };
-
-        localAudio.onended = cleanup;
-        localAudio.onerror = (e) => {
-          console.error(`Audio error for file "${item.name}":`, e);
-          cleanup();
-        };
-
-        const playPromise = localAudio.play();
-        if (playPromise !== undefined) {
-          playPromise.catch((err) => {
-            console.error("Local audio playback failed:", err);
-            cleanup();
-          });
-        }
-
-        audioInstances.current[id] = instances;
-        setActivePlaying((prev) => ({ ...prev, [id]: true }));
-      } catch (err) {
-        console.error("Audio initialization error:", err);
-      }
-    }
-  };
-
-  const stopAll = () => {
-    Object.keys(audioInstances.current).forEach((id) => {
-      const list = audioInstances.current[id];
-      if (list) {
-        list.forEach((audio) => {
-          audio.pause();
-          audio.currentTime = 0;
-        });
-      }
-    });
-    audioInstances.current = {};
-    setActivePlaying({});
-  };
-
+  //updates the volume of a specific sound effect
   const updateItemVolume = (id: string, newVolume: number) => {
     setSfxList((prev) => prev.map((item) => (item.id === id ? { ...item, volume: newVolume } : item)));
-    if (audioInstances.current[id]) {
+    const soundSet = soundAudiosMap.current.get(id);
+    if (soundSet) {
       const calcVol = Math.max(0, Math.min(1, newVolume * masterVolume));
-      audioInstances.current[id].forEach((a) => {
+      soundSet.forEach((a) => {
         a.volume = calcVol;
       });
     }
   };
 
+  //updates the master volume and applies it to all currently playing sounds
   const updateMasterVolume = (newMaster: number) => {
     setMasterVolume(newMaster);
-    Object.keys(audioInstances.current).forEach((id) => {
+    soundAudiosMap.current.forEach((soundSet, id) => {
       const item = sfxList.find((s) => s.id === id);
-      if (audioInstances.current[id] && item) {
+      if (item) {
         const calcVol = Math.max(0, Math.min(1, item.volume * newMaster));
-        audioInstances.current[id].forEach((a) => {
+        soundSet.forEach((a) => {
           a.volume = calcVol;
         });
       }
@@ -237,6 +271,7 @@ export default function SfxPage() {
 
   const filteredList = sfxList.filter((item) => item.name.toLowerCase().includes(search.toLowerCase()));
 
+  //returns the sfx page ui with all added controls and features for the soundboard
   return (
     <>
       <section className="stage sfx-stage">
