@@ -8,3 +8,4 @@ desktop/dist/
 **/__pycache__/
 desktop/renderer/node_modules/
 desktop/renderer/dist/
+**/.DS_Store
