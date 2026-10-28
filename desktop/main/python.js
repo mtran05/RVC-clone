@@ -13,12 +13,13 @@ function pythonEnv() {
   return { ...process.env, PYTHONIOENCODING: "utf-8", PYTHONUNBUFFERED: "1" };
 }
 
-// Sorted full paths of files in dir that end with ext. Empty when the folder is missing.
+// Sorted full paths of files in dir that end with ext (string or string[]). Empty when the folder is missing.
 function filesIn(dir, ext) {
   if (!fs.existsSync(dir)) return [];
+  const exts = Array.isArray(ext) ? ext : [ext];
   return fs
     .readdirSync(dir)
-    .filter((name) => name.toLowerCase().endsWith(ext))
+    .filter((name) => exts.some((suffix) => name.toLowerCase().endsWith(suffix)))
     .map((name) => path.join(dir, name))
     .sort();
 }

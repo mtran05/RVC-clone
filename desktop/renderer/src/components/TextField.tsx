@@ -21,7 +21,7 @@ export default function TextField({ label, tip, tipLabel, value, placeholder, di
   const id = useFieldId();
 
   return (
-    <Field label={label} tip={tip} tipLabel={tipLabel} extra={extra}>
+    <Field id={id} label={label} tip={tip} tipLabel={tipLabel} extra={extra}>
       <input
         id={id}
         className={controls.control}
