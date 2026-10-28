@@ -33,7 +33,7 @@ const OUTPUT_DEVICE = specOf("outputDevice");
 // The live page: pitch controls on the left, voice and device settings in the
 // right rack, and the Python process log along the bottom.
 export default function LivePage() {
-  const { running, logLines, pushLog, clearLog, setLive, devices, scan, refreshDevices, opts, setOpts } = useSession();
+  const { running, logLines, pushLog, clearLog, setLive, devices, scan, refreshDevices, opts, setOpts, recordLivePreset } = useSession();
   const [models, setModels] = useState<string[]>([]);
   const [indices, setIndices] = useState<string[]>([]);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -71,6 +71,7 @@ export default function LivePage() {
     }
     const cleaned = sanitizeOpts(opts);
     setOpts(cleaned);
+    recordLivePreset(cleaned);
     const result = await rvc.start(cleaned);
     if (!result.ok) {
       pushLog(result.error);

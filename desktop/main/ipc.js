@@ -12,29 +12,72 @@ const { buildArgs, parseDevices } = require("../args");
 const { attachLogs, filesIn, pythonEnv, runPython } = require("./python");
 const { getChild, getWin, setChild, setStopping } = require("./state");
 
+const AUDIO_EXTS = [".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac"];
+const IMAGE_MIME = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".gif": "image/gif",
+  ".svg": "image/svg+xml",
+};
+
 function registerIpc(locator) {
   const { root, python, missing } = locator;
 
-  // Models live in assets/weights, index files in assets/indices.
+  // Models live in assets/weights, index files in assets/indices, sounds in assets/sounds.
   ipcMain.handle("assets", () => {
-    if (!root) return { models: [], indices: [] };
+    if (!root) return { models: [], indices: [], sounds: [] };
     return {
       models: filesIn(path.join(root, "assets", "weights"), ".pth"),
       indices: filesIn(path.join(root, "assets", "indices"), ".index"),
+      sounds: filesIn(path.join(root, "assets", "sounds"), AUDIO_EXTS),
     };
   });
 
-  // kind is "model" or "index". Returns the chosen path, or null if cancelled.
+  // kind is "model", "index", "audio", or "image". Returns the chosen path (or data URL for image), or null if cancelled.
   ipcMain.handle("browse", async (_event, kind) => {
-    const model = kind === "model";
+    const picker =
+      kind === "model"
+        ? {
+            title: "Voice model",
+            defaultPath: root ? path.join(root, "assets", "weights") : undefined,
+            filters: [{ name: "Voice model", extensions: ["pth"] }],
+          }
+        : kind === "index"
+          ? {
+              title: "Index",
+              defaultPath: root ? path.join(root, "assets", "indices") : undefined,
+              filters: [{ name: "Index", extensions: ["index"] }],
+            }
+          : kind === "audio"
+            ? {
+                title: "Audio clip",
+                defaultPath: root ? path.join(root, "assets", "sounds") : undefined,
+                filters: [{ name: "Audio", extensions: ["mp3", "wav", "ogg", "flac", "m4a", "aac"] }],
+              }
+            : {
+                title: "Profile image",
+                filters: [{ name: "Image", extensions: ["png", "jpg", "jpeg", "webp", "gif", "svg"] }],
+              };
+
     const result = await dialog.showOpenDialog(getWin(), {
-      title: model ? "Voice model" : "Index",
-      defaultPath: root ? path.join(root, "assets", model ? "weights" : "indices") : undefined,
+      ...picker,
       properties: ["openFile"],
-      filters: model ? [{ name: "Voice model", extensions: ["pth"] }] : [{ name: "Index", extensions: ["index"] }],
     });
     if (result.canceled || !result.filePaths[0]) return null;
-    return result.filePaths[0];
+    const chosen = result.filePaths[0];
+    if (kind === "image") {
+      try {
+        const ext = path.extname(chosen).toLowerCase();
+        const mime = IMAGE_MIME[ext] || "image/png";
+        const data = fs.readFileSync(chosen);
+        return `data:${mime};base64,${data.toString("base64")}`;
+      } catch {
+        return null;
+      }
+    }
+    return chosen;
   });
 
   // Ask Python for the PortAudio device table and parse it for the two dropdowns.

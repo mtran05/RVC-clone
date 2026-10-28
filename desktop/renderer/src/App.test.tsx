@@ -104,14 +104,32 @@ describe("the app", () => {
     expect(screen.getByRole("tooltip").textContent).toContain("brighter or darker");
   });
 
-  it("walks between the placeholder pages", () => {
+  it("walks between the pages and saves/loads a preset", () => {
+    localStorage.clear();
     render(<App />);
+
+    // Shift pitch on Live, then navigate to Presets and save a profile.
+    const dial = screen.getByLabelText("Pitch scale") as HTMLInputElement;
+    fireEvent.change(dial, { target: { value: "5" } });
+
     fireEvent.click(screen.getByRole("link", { name: "Presets" }));
-    expect(screen.getByText("Coming soon.")).toBeTruthy();
     expect(screen.getByRole("region", { name: "Presets" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Go live" })).toBeNull();
 
+    fireEvent.click(screen.getByRole("button", { name: "Save current settings" }));
+    const nameInput = screen.getByLabelText("Profile name") as HTMLInputElement;
+    expect(nameInput.value).toBe("Custom voice");
+    fireEvent.change(nameInput, { target: { value: "Kiki Studio" } });
+    expect(screen.getByText("+5 st")).toBeTruthy();
+
+    // Tweak block time on the saved preset and load it into Live.
+    const blockInput = screen.getByLabelText("Block (seconds)") as HTMLInputElement;
+    fireEvent.change(blockInput, { target: { value: "0.15" } });
+    fireEvent.blur(blockInput);
+    fireEvent.click(screen.getByRole("button", { name: "Loaded" }));
+
     fireEvent.click(screen.getByRole("link", { name: "SFX" }));
     expect(screen.getByRole("region", { name: "SFX" })).toBeTruthy();
+    expect(screen.getByLabelText("Master volume")).toBeTruthy();
   });
 });

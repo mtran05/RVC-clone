@@ -1,0 +1,197 @@
+/* Overrides for the shared stage so the soundboard grid anchors at the top
+   instead of vertically centering like the single pitch dial. */
+.stage {
+  justify-content: flex-start;
+  padding-top: 12px;
+  padding-bottom: 20px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--hair);
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.search {
+  width: 210px;
+}
+
+.hiddenInput {
+  display: none;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 12px;
+  align-content: start;
+}
+
+.pad {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  background: var(--well);
+  border: 1px solid var(--hair);
+  border-radius: 2px;
+}
+
+.pad[data-playing="true"] {
+  border-color: var(--filament);
+  box-shadow: inset 2px 0 0 var(--filament);
+}
+
+.padTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.padName {
+  min-width: 0;
+  flex: 1;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.padActions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.keybind {
+  height: 22px;
+  padding: 0 7px;
+  background: var(--inset);
+  border: 1px solid var(--hair);
+  border-radius: 2px;
+  color: var(--dim);
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+
+.keybind:hover {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+
+.keybind[data-listening="true"] {
+  border-color: var(--filament);
+  color: var(--filament-ink);
+}
+
+.remove {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--hair);
+  border-radius: 2px;
+  color: var(--dim);
+  font-size: 14px;
+  line-height: 1;
+}
+
+.remove:hover {
+  border-color: var(--filament);
+  color: var(--filament-ink);
+}
+
+.trigger {
+  width: 100%;
+  height: 42px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--inset);
+  border: 1px solid var(--hair);
+  border-radius: 2px;
+  color: var(--ink);
+  font-family: var(--display);
+  font-size: 19px;
+}
+
+.trigger:hover {
+  border-color: var(--ink);
+}
+
+.trigger[data-playing="true"] {
+  border-color: var(--filament);
+  color: var(--filament-ink);
+  background: rgba(226, 90, 50, 0.1);
+}
+
+.lamp {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--hair);
+}
+
+.trigger[data-playing="true"] .lamp {
+  background: var(--filament);
+  box-shadow: 0 0 10px rgba(226, 90, 50, 0.75);
+}
+
+.gainRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.gainOut {
+  min-width: 3.5ch;
+  text-align: right;
+  color: var(--dim);
+  font-size: 15px;
+}
+
+.empty {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 20px;
+  background: var(--well);
+  border: 1px solid var(--hair);
+  border-radius: 2px;
+}
+
+.emptyTitle {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--display);
+  font-size: 20px;
+}
+
+.emptyNote {
+  margin: 0;
+  color: var(--dim);
+  font-size: 14px;
+}
+
+@media (max-width: 760px) {
+  .search {
+    width: 100%;
+  }
+}

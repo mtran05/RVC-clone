@@ -1,10 +1,16 @@
-import { useState, useEffect, useRef } from "react";
+import { ChangeEvent, useCallback, useEffect, useRef, useState } from "react";
 import { bridge } from "../lib/bridge";
+import { cx } from "../lib/cx";
+import { baseName } from "../lib/format";
 import { useSession } from "../lib/session";
+import Button from "../components/Button";
 import Field from "../components/Field";
-import TipButton from "../components/TipButton";
+import LabelRow from "../components/LabelRow";
 import RangeField from "../components/RangeField";
-import "./SfxPage.css";
+import SelectField from "../components/SelectField";
+import controls from "../styles/controls.module.css";
+import layout from "./LivePage.module.css";
+import styles from "./SfxPage.module.css";
 
 export interface SfxItem {
   id: string;
@@ -12,53 +18,86 @@ export interface SfxItem {
   path: string;
   keybind?: string;
   volume: number;
+  custom?: boolean;
 }
-//variable to store key binds to remember them
-const STORAGE_KEY = "overtone_bundled_sfx_keybinds";
+
+interface StoredSfxState {
+  keybinds?: Record<string, string>;
+  volumes?: Record<string, number>;
+  custom?: SfxItem[];
+  masterVolume?: number;
+}
+
+const STORAGE_KEY = "overtone_sfx_state_v1";
+const LEGACY_KEYBINDS_KEY = "overtone_bundled_sfx_keybinds";
 
 function formatDisplayName(pathStr: string): string {
-  const fileName =
-    pathStr
-      .split("/")
-      .pop()
-      ?.replace(/\.[^/.]+$/, "") ?? pathStr;
-  return fileName.replace(/[-_]/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+  const file = baseName(pathStr).replace(/\.[^/.]+$/, "");
+  return file.replace(/[-_]/g, " ").replace(/\b\w/g, (char) => char.toUpperCase()) || "Sound";
 }
 
-//checks for sounds in the assets/sounds folder and loads them into the project
-const loadedAudioModules = import.meta.glob<string>("../assets/sounds/*.{mp3,wav,ogg,m4a,flac,aac}", { eager: true, import: "default" });
+function toPlayableUrl(pathStr: string): string {
+  if (/^(https?:|data:|blob:|file:|\.|\/assets\/)/i.test(pathStr)) return pathStr;
+  const normalized = pathStr.replace(/\\/g, "/");
+  return normalized.startsWith("/") ? `file://${encodeURI(normalized)}` : `file:///${encodeURI(normalized)}`;
+}
 
-//store the loaded sounds into a constant array of SfxItem objects
-const PROJECT_SOUNDS: SfxItem[] = Object.entries(loadedAudioModules).map(([filePath, resolvedUrl]) => ({
+const loadedAudioModules = import.meta.glob<string>("../assets/sounds/*.{mp3,wav,ogg,m4a,flac,aac}", {
+  eager: true,
+  import: "default",
+});
+
+const BUNDLED_SOUNDS: SfxItem[] = Object.entries(loadedAudioModules).map(([filePath, resolvedUrl]) => ({
   id: filePath,
   name: formatDisplayName(filePath),
   path: resolvedUrl,
   volume: 0.8,
 }));
 
-// Main SFX Page Component
+function loadSavedSfxState(): StoredSfxState {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw) as StoredSfxState;
+    const legacy = localStorage.getItem(LEGACY_KEYBINDS_KEY);
+    if (legacy) return { keybinds: JSON.parse(legacy) as Record<string, string> };
+  } catch {
+    // Ignore malformed localStorage entries.
+  }
+  return {};
+}
+
+function mergeSounds(base: SfxItem[], saved: StoredSfxState): SfxItem[] {
+  const keybinds = saved.keybinds ?? {};
+  const volumes = saved.volumes ?? {};
+  const custom = (saved.custom ?? []).map((item) => ({
+    ...item,
+    custom: true,
+    keybind: keybinds[item.id] ?? item.keybind,
+    volume: volumes[item.id] ?? item.volume ?? 0.8,
+  }));
+  const seen = new Set(custom.map((item) => item.id));
+  const merged: SfxItem[] = [...custom];
+  for (const sound of base) {
+    if (seen.has(sound.id)) continue;
+    seen.add(sound.id);
+    merged.push({
+      ...sound,
+      keybind: keybinds[sound.id] ?? sound.keybind,
+      volume: volumes[sound.id] ?? sound.volume,
+    });
+  }
+  return merged;
+}
+
+// The soundboard page: trigger pads on the left stage, master volume and output
+// routing in the right rack, and the shared process log along the bottom.
 export default function SfxPage() {
-  const session = useSession();
-  const logLines = session?.logLines ?? [];
-  const clearLog = session?.clearLog;
+  const { logLines, clearLog, pushLog } = useSession();
+  const savedInit = useRef<StoredSfxState>(loadSavedSfxState());
 
-  const [sfxList, setSfxList] = useState<SfxItem[]>(() => {
-    try {
-      const savedKeybinds = localStorage.getItem(STORAGE_KEY);
-      const keybindMap: Record<string, string> = savedKeybinds ? JSON.parse(savedKeybinds) : {};
-
-      return PROJECT_SOUNDS.map((sound) => ({
-        ...sound,
-        keybind: keybindMap[sound.id] || undefined,
-      }));
-    } catch {
-      return PROJECT_SOUNDS;
-    }
-  });
-
-  // state variables for active playing sounds, master volume, search term, selected output device, and key listening state
+  const [sfxList, setSfxList] = useState<SfxItem[]>(() => mergeSounds(BUNDLED_SOUNDS, savedInit.current));
   const [activePlaying, setActivePlaying] = useState<Record<string, boolean>>({});
-  const [masterVolume, setMasterVolume] = useState<number>(0.8);
+  const [masterVolume, setMasterVolume] = useState<number>(() => savedInit.current.masterVolume ?? 0.8);
   const [search, setSearch] = useState<string>("");
   const [sfxOutput, setSfxOutput] = useState<string>("");
   const [listeningForKey, setListeningForKey] = useState<string | null>(null);
@@ -66,48 +105,71 @@ export default function SfxPage() {
 
   const allRunningAudios = useRef<Set<HTMLAudioElement>>(new Set());
   const soundAudiosMap = useRef<Map<string, Set<HTMLAudioElement>>>(new Map());
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const logRef = useRef<HTMLPreElement>(null);
 
-  // Function to refresh the list of audio output devices
-  const refreshDevices = async () => {
+  // Merge any audio files found in the project's assets/sounds folder.
+  useEffect(() => {
+    const rvc = bridge();
+    if (!rvc) return;
+    void rvc.assets().then((assets) => {
+      const diskSounds = (assets.sounds ?? []).map((filePath) => ({
+        id: filePath,
+        name: formatDisplayName(filePath),
+        path: toPlayableUrl(filePath),
+        volume: 0.8,
+      }));
+      if (diskSounds.length === 0) return;
+      setSfxList((current) => {
+        const existing = new Set(current.map((item) => item.id));
+        const additions = diskSounds.filter((item) => !existing.has(item.id));
+        return additions.length > 0 ? [...current, ...additions] : current;
+      });
+    });
+  }, []);
+
+  const refreshAudioOutputs = useCallback(async () => {
     try {
-      if (navigator.mediaDevices?.getUserMedia) {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach((track) => track.stop());
-      }
       if (navigator.mediaDevices?.enumerateDevices) {
         const all = await navigator.mediaDevices.enumerateDevices();
         setAudioOutputs(all.filter((d) => d.kind === "audiooutput"));
       }
-    } catch (err) {
-      console.error("Failed to load audio output devices:", err);
+    } catch {
+      // Ignore unsupported mediaDevices in headless/test environments.
     }
-  };
-
-  // Effect to refresh audio devices on mount and listen for device changes
-  useEffect(() => {
-    refreshDevices();
-    navigator.mediaDevices?.addEventListener("devicechange", refreshDevices);
-    return () => {
-      navigator.mediaDevices?.removeEventListener("devicechange", refreshDevices);
-    };
   }, []);
 
-  // Effect to save keybinds to localStorage whenever the sfxList changes
+  useEffect(() => {
+    void refreshAudioOutputs();
+    navigator.mediaDevices?.addEventListener?.("devicechange", refreshAudioOutputs);
+    return () => {
+      navigator.mediaDevices?.removeEventListener?.("devicechange", refreshAudioOutputs);
+    };
+  }, [refreshAudioOutputs]);
+
+  // Persist keybinds, pad volumes, custom clips, and master volume.
   useEffect(() => {
     try {
-      const keybindMap: Record<string, string> = {};
-      sfxList.forEach((item) => {
-        if (item.keybind) keybindMap[item.id] = item.keybind;
-      });
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(keybindMap));
-    } catch (err) {
-      console.error("Failed to save keybinds:", err);
+      const keybinds: Record<string, string> = {};
+      const volumes: Record<string, number> = {};
+      const custom: SfxItem[] = [];
+      for (const item of sfxList) {
+        if (item.keybind) keybinds[item.id] = item.keybind;
+        volumes[item.id] = item.volume;
+        if (item.custom) custom.push(item);
+      }
+      const payload: StoredSfxState = { keybinds, volumes, custom, masterVolume };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    } catch {
+      // Ignore storage errors.
     }
-  }, [sfxList]);
+  }, [sfxList, masterVolume]);
 
-  //stops a specific sound by its ID
-  const stopSound = (id: string) => {
+  useEffect(() => {
+    if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
+  }, [logLines]);
+
+  const stopSound = useCallback((id: string) => {
     const soundSet = soundAudiosMap.current.get(id);
     if (soundSet) {
       soundSet.forEach((audio) => {
@@ -118,10 +180,9 @@ export default function SfxPage() {
       soundAudiosMap.current.delete(id);
     }
     setActivePlaying((prev) => ({ ...prev, [id]: false }));
-  };
+  }, []);
 
-  //stops all playing sounds
-  const stopAll = () => {
+  const stopAll = useCallback(() => {
     allRunningAudios.current.forEach((audio) => {
       audio.pause();
       audio.currentTime = 0;
@@ -129,102 +190,101 @@ export default function SfxPage() {
     allRunningAudios.current.clear();
     soundAudiosMap.current.clear();
     setActivePlaying({});
-  };
+  }, []);
 
-  // Function to toggle play/stop for a specific sound by its ID
-  const togglePlay = async (id: string) => {
-    const item = sfxList.find((s) => s.id === id);
-    if (!item || !item.path) return;
+  useEffect(() => () => stopAll(), [stopAll]);
 
-    //if the sound is already playing, stop it other wise, play it
-    const activeInstances = soundAudiosMap.current.get(id);
-    if (activeInstances && activeInstances.size > 0) {
-      stopSound(id);
-      return;
-    }
+  const togglePlay = useCallback(
+    async (id: string) => {
+      const item = sfxList.find((s) => s.id === id);
+      if (!item || !item.path) return;
 
-    //play the sound and handle volume, output device, and cleanup
-    try {
-      const calcVolume = Math.max(0, Math.min(1, item.volume * masterVolume));
-      const instances: HTMLAudioElement[] = [];
+      const activeInstances = soundAudiosMap.current.get(id);
+      if (activeInstances && activeInstances.size > 0) {
+        stopSound(id);
+        return;
+      }
 
-      // Create and play the local audio instance
-      const localAudio = new Audio(item.path);
-      localAudio.volume = calcVolume;
-      instances.push(localAudio);
+      try {
+        const calcVolume = Math.max(0, Math.min(1, item.volume * masterVolume));
+        const instances: HTMLAudioElement[] = [];
 
-      //
-      if (sfxOutput) {
-        const streamAudio = new Audio(item.path);
-        streamAudio.volume = calcVolume;
+        const localAudio = new Audio(item.path);
+        localAudio.volume = calcVolume;
+        instances.push(localAudio);
 
-        // Attempt to set the sink ID for the secondary output device if supported
-        if ("setSinkId" in streamAudio && typeof (streamAudio as any).setSinkId === "function") {
-          try {
-            await (streamAudio as any).setSinkId(sfxOutput);
-          } catch (err) {
-            console.warn("Failed to attach audio sink ID:", err);
+        if (sfxOutput) {
+          const streamAudio = new Audio(item.path);
+          streamAudio.volume = calcVolume;
+          if (typeof streamAudio.setSinkId === "function") {
+            try {
+              await streamAudio.setSinkId(sfxOutput);
+            } catch {
+              // Ignore sink assignment failure if device disconnected.
+            }
           }
+          void streamAudio.play().catch(() => {});
+          instances.push(streamAudio);
         }
-        streamAudio.play().catch((e) => console.error("Secondary audio stream failed:", e));
-        instances.push(streamAudio);
-      }
 
-      //store audio instances in a map
-      if (!soundAudiosMap.current.has(id)) {
-        soundAudiosMap.current.set(id, new Set());
-      }
-      //store the audio instances in a set for this sound ID
-      const soundSet = soundAudiosMap.current.get(id)!;
-
-      instances.forEach((a) => {
-        allRunningAudios.current.add(a);
-        soundSet.add(a);
-      });
-
-      //stops and removes audio instances when they finish playing or encounter an error
-      const cleanup = () => {
+        if (!soundAudiosMap.current.has(id)) {
+          soundAudiosMap.current.set(id, new Set());
+        }
+        const soundSet = soundAudiosMap.current.get(id)!;
         instances.forEach((a) => {
-          a.pause();
-          allRunningAudios.current.delete(a);
-          soundSet.delete(a);
+          allRunningAudios.current.add(a);
+          soundSet.add(a);
         });
-        if (soundSet.size === 0) {
-          soundAudiosMap.current.delete(id);
-          setActivePlaying((prev) => ({ ...prev, [id]: false }));
-        }
-      };
 
-      // Attach event listeners for cleanup
-      localAudio.onended = cleanup;
-      localAudio.onerror = (e) => {
-        console.error(`Audio error for file "${item.name}":`, e);
-        cleanup();
-      };
+        const cleanup = () => {
+          instances.forEach((a) => {
+            a.pause();
+            allRunningAudios.current.delete(a);
+            soundSet.delete(a);
+          });
+          if (soundSet.size === 0) {
+            soundAudiosMap.current.delete(id);
+            setActivePlaying((prev) => ({ ...prev, [id]: false }));
+          }
+        };
 
-      // Attempt to play the local audio and handle any promise rejections
-      const playPromise = localAudio.play();
-      if (playPromise !== undefined) {
-        playPromise.catch((err) => {
-          console.error("Local audio playback failed:", err);
+        localAudio.onended = cleanup;
+        localAudio.onerror = () => {
+          pushLog(`Could not play sound: ${item.name}`);
           cleanup();
-        });
+        };
+
+        const playPromise = localAudio.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(() => {
+            cleanup();
+          });
+        }
+
+        setActivePlaying((prev) => ({ ...prev, [id]: true }));
+      } catch {
+        pushLog(`Could not start sound: ${item.name}`);
       }
+    },
+    [sfxList, masterVolume, sfxOutput, stopSound, pushLog],
+  );
 
-      setActivePlaying((prev) => ({ ...prev, [id]: true }));
-    } catch (err) {
-      console.error("Audio initialization error:", err);
-    }
-  };
-
-  //if key is pressed, trigger the sound affect.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement;
-      const isInput = target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable;
+      const target = e.target as HTMLElement | null;
+      const isInput = Boolean(target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable));
 
       if (listeningForKey) {
         e.preventDefault();
+        if (e.key === "Escape") {
+          setListeningForKey(null);
+          return;
+        }
+        if (e.key === "Backspace" || e.key === "Delete") {
+          setSfxList((prev) => prev.map((item) => (item.id === listeningForKey ? { ...item, keybind: undefined } : item)));
+          setListeningForKey(null);
+          return;
+        }
         const keyName = e.key.length === 1 ? e.key.toUpperCase() : e.code;
         setSfxList((prev) => prev.map((item) => (item.id === listeningForKey ? { ...item, keybind: keyName } : item)));
         setListeningForKey(null);
@@ -233,17 +293,17 @@ export default function SfxPage() {
 
       if (isInput) return;
 
-      const match = sfxList.find((item) => item.keybind && item.keybind.toLowerCase() === e.key.toLowerCase());
+      const pressed = e.key.length === 1 ? e.key.toLowerCase() : e.code.toLowerCase();
+      const match = sfxList.find((item) => item.keybind && item.keybind.toLowerCase() === pressed);
       if (match && !e.repeat) {
-        togglePlay(match.id);
+        void togglePlay(match.id);
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [sfxList, listeningForKey, masterVolume, sfxOutput]);
+  }, [sfxList, listeningForKey, togglePlay]);
 
-  //updates the volume of a specific sound effect
   const updateItemVolume = (id: string, newVolume: number) => {
     setSfxList((prev) => prev.map((item) => (item.id === id ? { ...item, volume: newVolume } : item)));
     const soundSet = soundAudiosMap.current.get(id);
@@ -255,7 +315,6 @@ export default function SfxPage() {
     }
   };
 
-  //updates the master volume and applies it to all currently playing sounds
   const updateMasterVolume = (newMaster: number) => {
     setMasterVolume(newMaster);
     soundAudiosMap.current.forEach((soundSet, id) => {
@@ -269,130 +328,168 @@ export default function SfxPage() {
     });
   };
 
-  const filteredList = sfxList.filter((item) => item.name.toLowerCase().includes(search.toLowerCase()));
+  const addSound = async () => {
+    const rvc = bridge();
+    if (rvc) {
+      const file = await rvc.browse("audio");
+      if (!file) return;
+      const item: SfxItem = {
+        id: file,
+        name: formatDisplayName(file),
+        path: toPlayableUrl(file),
+        volume: 0.8,
+        custom: true,
+      };
+      setSfxList((prev) => (prev.some((existing) => existing.id === item.id) ? prev : [...prev, item]));
+      return;
+    }
+    fileInputRef.current?.click();
+  };
 
-  //returns the sfx page ui with all added controls and features for the soundboard
+  const onFileInput = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    const id = `custom:${file.name}`;
+    const item: SfxItem = {
+      id,
+      name: formatDisplayName(file.name),
+      path: url,
+      volume: 0.8,
+      custom: true,
+    };
+    setSfxList((prev) => (prev.some((existing) => existing.id === item.id) ? prev : [...prev, item]));
+  };
+
+  const removeSound = (id: string) => {
+    stopSound(id);
+    setSfxList((prev) => prev.filter((item) => item.id !== id));
+  };
+
+  const filteredList = sfxList.filter((item) => item.name.toLowerCase().includes(search.toLowerCase()));
+  const anyPlaying = Object.values(activePlaying).some(Boolean);
+
   return (
-    <>
-      <section className="stage sfx-stage">
-        <div className="sfx-header">
-          <div className="sfx-title-row">
-            <span className="panel-label">Project Soundboard</span>
-            <TipButton
-              label="About Soundboard"
-              text="Trigger sound effects live from your project library. Click a pad or assign a keybind to trigger audio instantly."
-            />
-          </div>
-          <div className="sfx-toolbar">
+    <div className={layout.live}>
+      <section className={cx(layout.stage, styles.stage)} aria-label="SFX">
+        <div className={styles.header}>
+          <LabelRow
+            as="span"
+            label="Soundboard"
+            tip="Trigger audio clips with a click or a bound key. Route them to a secondary output to send effects into voice chat."
+          />
+          <div className={styles.toolbar}>
             <input
               type="search"
-              className="control sfx-search"
-              placeholder="Search project sounds..."
+              className={cx(controls.control, styles.search)}
+              placeholder="Filter sounds"
+              aria-label="Filter sounds"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
-            <button type="button" className="text danger-text" onClick={stopAll}>
-              Stop All
-            </button>
+            <Button onClick={() => void addSound()}>Add sound</Button>
+            <input ref={fileInputRef} type="file" accept="audio/*" className={styles.hiddenInput} onChange={onFileInput} />
           </div>
         </div>
 
-        <div className="sfx-grid">
+        <div className={styles.grid}>
           {filteredList.map((sfx) => {
-            const isPlaying = !!activePlaying[sfx.id];
+            const isPlaying = Boolean(activePlaying[sfx.id]);
+            const isListening = listeningForKey === sfx.id;
             return (
-              <div key={sfx.id} className={`sfx-card ${isPlaying ? "playing" : ""}`}>
-                <div className="sfx-card-top">
-                  <span className="sfx-name" title={sfx.name}>
+              <div key={sfx.id} className={styles.pad} data-playing={isPlaying ? "true" : undefined}>
+                <div className={styles.padTop}>
+                  <span className={styles.padName} title={sfx.name}>
                     {sfx.name}
                   </span>
+                  <div className={styles.padActions}>
+                    <button
+                      type="button"
+                      className={styles.keybind}
+                      data-listening={isListening ? "true" : undefined}
+                      aria-label={`Keybind for ${sfx.name}`}
+                      onClick={() => setListeningForKey(isListening ? null : sfx.id)}
+                    >
+                      {isListening ? "Key…" : sfx.keybind || "Bind"}
+                    </button>
+                    {sfx.custom && (
+                      <button type="button" className={styles.remove} aria-label={`Remove ${sfx.name}`} onClick={() => removeSound(sfx.id)}>
+                        ×
+                      </button>
+                    )}
+                  </div>
                 </div>
 
-                <button type="button" className={`sfx-pad-btn ${isPlaying ? "active" : ""}`} onClick={() => togglePlay(sfx.id)}>
-                  {isPlaying ? "⏹ Stop" : "▶ Play"}
+                <button type="button" className={styles.trigger} data-playing={isPlaying ? "true" : undefined} onClick={() => void togglePlay(sfx.id)}>
+                  <span>{isPlaying ? "Playing" : "Trigger"}</span>
+                  <span className={styles.lamp} aria-hidden="true" />
                 </button>
 
-                <div className="sfx-card-controls">
-                  <button
-                    type="button"
-                    className={`keybind-badge ${listeningForKey === sfx.id ? "listening" : ""}`}
-                    onClick={() => setListeningForKey(listeningForKey === sfx.id ? null : sfx.id)}
-                  >
-                    {listeningForKey === sfx.id ? "Press key..." : sfx.keybind || "Bind key"}
-                  </button>
-
-                  <div className="sfx-vol-slider">
-                    <RangeField
-                      id={`vol-${sfx.id}`}
-                      value={sfx.volume}
-                      min={0}
-                      max={1}
-                      step={0.05}
-                      disabled={false}
-                      onChange={(v) => updateItemVolume(sfx.id, v)}
-                    />
-                  </div>
+                <div className={styles.gainRow}>
+                  <RangeField value={sfx.volume} min={0} max={1} step={0.01} ariaLabel={`${sfx.name} volume`} onChange={(v) => updateItemVolume(sfx.id, v)} />
+                  <output className={styles.gainOut}>{Math.round(sfx.volume * 100)}%</output>
                 </div>
               </div>
             );
           })}
 
           {filteredList.length === 0 && (
-            <div className="sfx-empty">
-              <p>
-                No audio files found in <code>src/assets/sounds/</code>.
-              </p>
+            <div className={styles.empty}>
+              <p className={styles.emptyTitle}>No sounds loaded</p>
+              <p className={styles.emptyNote}>Drop audio clips into assets/sounds or add files from disk to build your soundboard.</p>
+              <Button onClick={() => void addSound()}>Add sound</Button>
             </div>
           )}
         </div>
       </section>
 
-      <aside className="rack">
-        <div className="rack-body">
-          <p className="group">Soundboard Controls</p>
-
-          <Field
-            id="master-sfx-vol"
-            label="Master Volume"
-            tipLabel="About Master Volume"
-            tip="Controls overall volume for all soundboard triggers."
-            extra={<output id="master-sfx-vol-out">{Math.round(masterVolume * 100)}%</output>}
-          >
-            <RangeField id="master-sfx-vol" value={masterVolume} min={0} max={1} step={0.01} disabled={false} onChange={updateMasterVolume} />
+      <aside className={layout.rack}>
+        <div className={layout.rackBody}>
+          <h3 className={layout.group}>Master</h3>
+          <Field label="Master volume" tip="Scales the playback loudness of every soundboard pad." extra={<output>{Math.round(masterVolume * 100)}%</output>}>
+            <RangeField value={masterVolume} min={0} max={1} step={0.01} onChange={updateMasterVolume} />
           </Field>
 
-          <Field
-            id="sfx-output-device"
-            label="Secondary Output"
-            tipLabel="About Cable Output"
-            tip="Select BlackHole (macOS) or Virtual Cable (Windows) to route sounds to Discord/Streams."
-          >
-            <select id="sfx-output-device" className="control" value={sfxOutput} onChange={(e) => setSfxOutput(e.target.value)}>
-              <option value="">Disabled (Headphones only)</option>
-              {audioOutputs.map((d) => (
-                <option key={d.deviceId} value={d.deviceId}>
-                  {d.label || `Output Device (${d.deviceId.slice(0, 8)})`}
-                </option>
-              ))}
-            </select>
-          </Field>
+          <h3 className={layout.group}>Output</h3>
+          <SelectField
+            label="Secondary output"
+            tip="Plays a second stream into a virtual cable so voice chat hears your soundboard while you monitor on headphones."
+            value={sfxOutput}
+            onChange={setSfxOutput}
+            options={[
+              { value: "", label: "None (default output)" },
+              ...audioOutputs.map((d) => ({
+                value: d.deviceId,
+                label: d.label || `Output (${d.deviceId.slice(0, 8)})`,
+              })),
+            ]}
+          />
+          <Button variant="text" onClick={() => void refreshAudioOutputs()}>
+            Refresh outputs
+          </Button>
         </div>
+
+        <Button variant="more" onClick={() => void addSound()}>
+          Add sound
+        </Button>
+        <Button variant="start" running={anyPlaying} onClick={stopAll}>
+          Stop all
+        </Button>
       </aside>
 
-      <section className="tape" aria-label="Logs">
-        <div className="tape-bar">
+      <section className={layout.tape} aria-label="Logs">
+        <div className={layout.tapeBar}>
           <h2>Logs</h2>
-          {clearLog && (
-            <button type="button" className="text" id="clear-log" onClick={clearLog}>
-              Clear
-            </button>
-          )}
+          <Button variant="text" className={layout.tapeAction} onClick={clearLog}>
+            Clear
+          </Button>
         </div>
-        {logLines.length === 0 && <p className="log-empty">Logs are displayed here.</p>}
-        <pre id="log" aria-live="polite" ref={logRef}>
+        {logLines.length === 0 && <p className={layout.logEmpty}>Logs are displayed here.</p>}
+        <pre id="log" className={layout.log} aria-live="polite" ref={logRef}>
           {logLines.join("\n")}
         </pre>
       </section>
-    </>
+    </div>
   );
 }
