@@ -6,7 +6,7 @@ Based on [RVC WebUI](https://github.com/RVC-Project/Retrieval-based-Voice-Conver
 
 ## Setup
 
-### Windows Virtual Environment
+### Python Virtual Environment (Windows)
 
 Install Python 3.12 x64, then
 
@@ -41,7 +41,7 @@ hf download lj1995/VoiceConversionWebUI --revision main --include "pymss_weights
 .venv\Scripts\python.exe -m inference.realtime --model assets/weights/kikiV1.pth --live
 ```
 
-To convert a file instead of the microphone, omit the `--live` option use the same command with `--input` and `--output`.
+To convert a file instead of the microphone, omit the `--live` option and use the same command with `--input` and `--output`.
 
 ### Python layout
 
@@ -125,7 +125,7 @@ desktop/
       components/      one .tsx and one .module.css per component
       hooks/           useLog, useDevices, useDismiss
       lib/             the bridge types, option specs, and form sanitizing
-      pages/           one directory per routed page
+      pages/           the routed pages (Live, Presets, SFX) and their styles
       styles/          global.css (reset and tokens) and shared control styles
 ```
 
