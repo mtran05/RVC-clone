@@ -6,6 +6,7 @@ synthesizer. infer() is what realtime.py calls for every block.
 
 import logging
 import traceback
+from pathlib import Path
 from time import time as ttime
 
 import faiss
@@ -24,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 # Feature extractors and pitch models all read 16 kHz audio.
 SAMPLE_RATE_16K = 16000
-RMVPE_MODEL_PATH = "assets/rmvpe/rmvpe.pt"
+RMVPE_MODEL_PATH = str((Path(__file__).resolve().parent.parent / "assets" / "rmvpe" / "rmvpe.pt").resolve())
 
 
 def get_synthesizer(pth_path, device=torch.device("cpu")):
